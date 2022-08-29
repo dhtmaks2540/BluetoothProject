@@ -6,69 +6,111 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.util.Log
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
 import com.example.bluetoothproject.databinding.ActivityMainBinding
-import com.example.bluetoothproject.di.BluetoothReceiver
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.BufferedReader
 import java.io.InputStream
+import java.io.InputStreamReader
 import java.io.OutputStream
-import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
 import java.util.*
+import java.util.stream.Collectors
 import javax.inject.Inject
-
-private const val TAG = "MAIN_ACTIVITY"
-private const val BLUETOOTH_PERMISSION = 1
 
 @AndroidEntryPoint
 class MainActivity @Inject constructor() : AppCompatActivity() {
+    companion object {
+        private const val TAG = "MAINACTIVITY"
+        private const val BLUETOOTH_CONNECT = 1
+        private const val BLUETOOTH_SCAN = 2
+        private const val BLUETOOTH_PERMISSION = 100
+    }
+
     private lateinit var binding: ActivityMainBinding
+
     private lateinit var bluetoothManager: BluetoothManager
-    private lateinit var bluetoothAdapter: BluetoothAdapter
+    private var bluetoothAdapter: BluetoothAdapter? = null
 
-    private val activityResultLauncher: ActivityResultLauncher<Intent> =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            if (it.resultCode == RESULT_OK) {
-                showMessage(this, "블루투스 활성화")
-            } else if (it.resultCode == RESULT_CANCELED) {
-                showMessage(this, "취소")
-            }
-        }
+    private lateinit var activityResultLauncher: ActivityResultLauncher<Intent>
+    private val adapter: ArrayAdapter<Pair<String, String>> by lazy {
+        ArrayAdapter(this, android.R.layout.simple_list_item_1)
+    }
 
-    @Inject
-    lateinit var receiver: BluetoothReceiver
+    // BroadcastReceiver
+    private lateinit var broadcastReceiver: BroadcastReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        binding = DataBindingUtil.setContentView<ActivityMainBinding?>(this, R.layout.activity_main)
-            .apply {
-                handler = this@MainActivity
-            }
 
         init()
     }
 
     private fun init() {
+        // binding 초기화
+        binding = DataBindingUtil.setContentView<ActivityMainBinding?>(this, R.layout.activity_main)
+            .apply {
+                handler = this@MainActivity
+                arrayAdapter = adapter
+                lvDevice.onItemClickListener =
+                    AdapterView.OnItemClickListener { _, _, position, _ ->
+                        adapter.getItem(position)?.second?.let { connectDevice(it) }
+                    }
+            }
+        
         // 블루투스 초기화
         bluetoothManager = getSystemService(BluetoothManager::class.java)
         bluetoothAdapter = bluetoothManager.adapter
+        // ActivityResultLauncher 초기화
+        activityResultLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                if (it.resultCode == RESULT_OK) {
+                    showMessage(this, "블루투스 활성화")
+                } else if (it.resultCode == RESULT_CANCELED) {
+                    showMessage(this, "취소")
+                }
+            }
+
+        // BroadcastReceiver 초기화
+        broadcastReceiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    BluetoothDevice.ACTION_FOUND -> {
+                        // BluetoothDevice 객체 획득
+                        val device =
+                            intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        // 기기 이름
+                        val deviceName = device?.name
+                        // 기기 주소
+                        val deviceHardwareAddress = device?.address
+                        // 이름과 주소가 null이 아닌 경우
+                        if (deviceName != null && deviceHardwareAddress != null) {
+                            adapter.add(Pair(deviceName, deviceHardwareAddress))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Register BroadcastReceiver
+        val intentFilter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        registerReceiver(broadcastReceiver, intentFilter)
 
         setBluetooth()
-        registerReceiver(receiver, receiver.filter)
     }
 
     // 초기 권한 확인
@@ -83,8 +125,8 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
     // 권한에 따른 UI 분기
     private fun setUi(flag: Boolean) {
         binding.apply {
-            btnCon.isEnabled = flag
-            btnDiscon.isEnabled = flag
+            btnActivate.isEnabled = flag
+            btnDeactivate.isEnabled = flag
             btnPair.isEnabled = flag
             btnSearch.isEnabled = flag
         }
@@ -113,82 +155,115 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
         }
     }
 
-    // 연결
-    fun setConnect() {
-        if (!::bluetoothAdapter.isInitialized) {
-            showMessage(this, "블루투스를 지원하지 않는 장치입니다.")
-        } else if (!bluetoothAdapter.isEnabled) {
-            val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            activityResultLauncher.launch(intent)
-        } else {
-            showMessage(this, "이미 활성화가 되었습니다.")
-        }
-    }
-
-    // 연결해제
-    @SuppressLint("MissingPermission")
-    fun setDisConnect() {
-        if (!bluetoothAdapter.isEnabled) {
-            showMessage(this, "이미 비활성화 되어 있습니다.")
-        } else {
-            bluetoothAdapter.disable()
-            showMessage(this, "블루투스를 비활성화 하였습니다.")
-        }
-    }
-
-    // 페어링된 디바이스 검색
-    @SuppressLint("MissingPermission")
-    fun getPairedDevices() {
-        if (bluetoothAdapter.isEnabled) {
-            val pairedDevices: Set<BluetoothDevice> = bluetoothAdapter.bondedDevices
-            if (pairedDevices.isNotEmpty()) {
-                val alertBuilder = AlertDialog.Builder(this).apply {
-                    val listPairedDevices = pairedDevices.map { it.name }
-                    val items = listPairedDevices.toTypedArray()
-                    setItems(
-                        items
-                    ) { _, index ->
-                        connectDevice(pairedDevices, items[index])
-                    }
-                }
-
-                val alertDialog = alertBuilder.create()
-                alertDialog.show()
-            } else {
-                showMessage(this, "페어링된 기기가 없습니다.")
+    // 활성화 요청
+    fun setActivate() {
+        bluetoothAdapter?.let {
+            // 비활성화 상태라면
+            if (!it.isEnabled) {
+                // 활성화 요청
+                val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                activityResultLauncher.launch(intent)
+            } else { // 활성 상태라면
+                showMessage(this, "이미 활성화 되어 있습니다")
             }
-        } else {
-            showMessage(this, "블루투스가 비활성화 되어 있습니다.")
+            return
         }
+        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
-    // 기기 검색(권한에 따른 오류 예상, 더 검색 필요 https://kimyounghoons.github.io/android/android-bluetooth-android10/)
-    fun findDevice() {
-        val permissions = arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-        ActivityCompat.requestPermissions(this, permissions, 2)
+    // 비활성화 요청
+    fun setDeActivate() {
+        bluetoothAdapter?.let {
+            // 비활성화 상태라면
+            if (!it.isEnabled) {
+                showMessage(this, "이미 비활성화 되어 있습니다")
+                // 활성 상태라면
+            } else {
+                // 블루투스 비활성화
+                it.disable()
+                showMessage(this, "블루투스를 비활성화 하였습니다")
+            }
 
-        val flag = bluetoothAdapter.startDiscovery()
-        setLog(TAG, "StartDiscovery : $flag")
-        showMessage(this, "기기 검색을 시작하였습니다.")
-    }
-
-    // 디바이스에 연결
-    private fun connectDevice(devices: Set<BluetoothDevice>, deviceName: String) {
-        val device = devices.first { it.name == deviceName }
-        val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-        val thread = ConnectThread(uuid, device)
-
-        if(thread.isAlive) {
-            thread.cancel()
             return
         }
 
-        thread.run()
-        setLog(TAG, "Connect : ${isConnected(device)} - ${device.address} - ${device.name} - ${device.uuids}")
+        showMessage(this, "블루투스를 지원하지 않는 장치")
+    }
+
+    // 페어링된 디바이스 검색
+    fun getPairedDevices() {
+        bluetoothAdapter?.let {
+            // 블루투스 활성화 상태라면
+            if (it.isEnabled) {
+                // ArrayAdapter clear
+                adapter.clear()
+                // 페어링된 기기 확인
+                val pairedDevices: Set<BluetoothDevice> = it.bondedDevices
+                // 페어링된 기기가 존재하는 경우
+                if (pairedDevices.isNotEmpty()) {
+                    pairedDevices.forEach { device ->
+                        // ArrayAdapter에 아이템 추가
+                        adapter.add(Pair(device.name, device.address))
+                    }
+                } else {
+                    showMessage(this, "페어링된 기기가 없습니다.")
+                }
+            } else {
+                showMessage(this, "블루투스가 비활성화 되어 있습니다.")
+            }
+
+            return
+        }
+
+        showMessage(this, "블루투스를 지원하지 않는 장치")
+    }
+
+    // 기기 검색
+    fun findDevice() {
+        bluetoothAdapter?.let {
+            // 블루투스가 활성화 상태라면
+            if(it.isEnabled) {
+                // 현재 검색중이라면
+                if (it.isDiscovering) {
+                    // 검색 취소
+                    it.cancelDiscovery()
+                    showMessage(this, "기기검색이 중단되었습니다.")
+                    return
+                }
+
+                // ArrayAdapter clear
+                adapter.clear()
+                // 검색시작
+                it.startDiscovery()
+                showMessage(this, "기기 검색을 시작하였습니다")
+            } else {
+                showMessage(this, "블루투스가 비활성화되어 있습니다")
+            }
+            return
+        }
+
+        showMessage(this, "블루투스를 지원하지 않는 장치")
+    }
+
+    // 디바이스에 연결
+    private fun connectDevice(deviceAddress: String) {
+        val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
+        device?.let {
+            val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+            val thread = ConnectThread(uuid, device)
+
+            if (thread.isAlive) {
+                thread.cancel()
+                return
+            }
+
+            thread.run()
+            showMessage(this, "${device.name}과 연결되었습니다.")
+
+            return
+        }
+
+        showMessage(this, "잘못된 Device 입니다.")
     }
 
 
@@ -211,12 +286,15 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
         }
 
         override fun run() {
-            bluetoothAdapter.cancelDiscovery()
+            bluetoothAdapter?.cancelDiscovery()
 
             try {
                 connectSocket?.let { socket ->
                     socket.connect()
-                    Log.d(TAG, "SOCKET : ${connectSocket?.isConnected} - $connectSocket - ${connectSocket?.remoteDevice} - ${connectSocket?.inputStream}")
+                    Log.d(
+                        TAG,
+                        "SOCKET : ${connectSocket?.isConnected} - $connectSocket - ${connectSocket?.remoteDevice} - ${connectSocket?.inputStream}"
+                    )
                     val connectedThread = ConnectedThread(socket)
                     connectedThread.start()
                 }
@@ -237,7 +315,7 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
     private inner class ConnectedThread(socket: BluetoothSocket) : Thread() {
         private lateinit var inputStream: InputStream
         private lateinit var outputStream: OutputStream
-        private val buffer = ByteArray(1024)
+        private var buffer = ByteArray(1024)
 
         init {
             try {
@@ -250,25 +328,31 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
 
         override fun run() {
             var numBytes: Int
-            while(!this.isInterrupted) {
-                sleep(5000)
-                numBytes = try {
-                    inputStream.read(buffer)
-                } catch (e: Exception) {
-                    setLog(TAG, "Disconnected")
-                    break
+            while(true) {
+                try {
+                    sleep(100)
+                    numBytes = inputStream.available()
+
+                    if(numBytes > 0) {
+                        buffer = ByteArray(numBytes)
+                        numBytes = inputStream.read(buffer, 0, numBytes)
+                    }
+                    for(i in 0 until numBytes) {
+                        print(buffer[i])
+                    }
+                    println()
+
+                } catch(e: Exception) {
+                    setLog(TAG, e.message.toString())
                 }
-                write(buffer)
-                setLog(TAG, "RECEIVE_DATA")
             }
         }
 
-        fun write(bytes: ByteArray) {
+        fun write(input: String) {
             try {
+                val bytes = input.toByteArray()
                 outputStream.write(bytes)
-                setLog(TAG, "SEND_DATA")
             } catch (e: Exception) {
-                setLog(TAG, "SEND_ERROR")
             }
         }
     }
@@ -294,18 +378,18 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (::bluetoothAdapter.isInitialized) {
+        bluetoothAdapter?.let {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val result =
                     ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN)
                 if (result == PackageManager.PERMISSION_GRANTED) {
-                    bluetoothAdapter.cancelDiscovery()
+                    it.cancelDiscovery()
                 } else {
                     requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_SCAN)
                 }
             }
         }
 
-        unregisterReceiver(receiver)
+        unregisterReceiver(broadcastReceiver)
     }
 }
