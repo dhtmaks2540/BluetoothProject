@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.example.bluetoothproject">
 
+    <!-- Android 11 버전까지를 위한 권한 -->
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />
@@ -10,9 +11,11 @@
         android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
 
+    <!-- 기기 검색을 위한 권한(위치가 필요하지 않고 장비만 검색하기 위해 위치는 무시) -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
+    <!-- 페어링된 기기를 확인하기 위한 권한 -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
 

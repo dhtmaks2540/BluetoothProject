@@ -35,7 +35,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity @Inject constructor() : AppCompatActivity() {
     companion object {
-        private const val TAG = "MAINACTIVITY"
+        private const val TAG = "MAIN_ACTIVITY"
         private const val BLUETOOTH_CONNECT = 1
         private const val BLUETOOTH_SCAN = 2
         private const val BLUETOOTH_PERMISSION = 100
@@ -52,11 +52,10 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
     }
 
     // BroadcastReceiver
-    private lateinit var broadcastReceiver: BroadcastReceiver
+    private lateinit var bluetoothBroadcastReceiver: BroadcastReceiver
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         init()
     }
 
@@ -68,10 +67,12 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
                 arrayAdapter = adapter
                 lvDevice.onItemClickListener =
                     AdapterView.OnItemClickListener { _, _, position, _ ->
-                        adapter.getItem(position)?.second?.let { connectDevice(it) }
+                        adapter.getItem(position)?.second?.let {
+                            connectDevice(it)
+                        }
                     }
             }
-        
+
         // 블루투스 초기화
         bluetoothManager = getSystemService(BluetoothManager::class.java)
         bluetoothAdapter = bluetoothManager.adapter
@@ -85,8 +86,8 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
                 }
             }
 
-        // BroadcastReceiver 초기화
-        broadcastReceiver = object : BroadcastReceiver() {
+        // 블루투스 기기 검색 및 상태변화 브로드캐스트
+        bluetoothBroadcastReceiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context?, intent: Intent?) {
                 when (intent?.action) {
                     BluetoothDevice.ACTION_FOUND -> {
@@ -102,13 +103,38 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
                             adapter.add(Pair(deviceName, deviceHardwareAddress))
                         }
                     }
+
+                    BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                        when (intent.getIntExtra(
+                            BluetoothAdapter.EXTRA_STATE,
+                            BluetoothAdapter.ERROR
+                        )) {
+                            // 비활성화
+                            BluetoothAdapter.STATE_OFF -> {
+
+                            }
+                            // 비활성화 되고 있음
+                            BluetoothAdapter.STATE_TURNING_OFF -> {
+                                showMessage(this@MainActivity, "블루투스가 비활성화되어 연결을 중단합니다.")
+                            }
+                            // 활성화
+                            BluetoothAdapter.STATE_ON -> {
+
+                            }
+                            // 활성화 되고 있음
+                            BluetoothAdapter.STATE_TURNING_ON -> {
+
+                            }
+                        }
+                    }
                 }
             }
         }
 
         // Register BroadcastReceiver
         val intentFilter = IntentFilter(BluetoothDevice.ACTION_FOUND)
-        registerReceiver(broadcastReceiver, intentFilter)
+        intentFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        registerReceiver(bluetoothBroadcastReceiver, intentFilter)
 
         setBluetooth()
     }
@@ -222,7 +248,7 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
     fun findDevice() {
         bluetoothAdapter?.let {
             // 블루투스가 활성화 상태라면
-            if(it.isEnabled) {
+            if (it.isEnabled) {
                 // 현재 검색중이라면
                 if (it.isDiscovering) {
                     // 검색 취소
@@ -247,23 +273,26 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
 
     // 디바이스에 연결
     private fun connectDevice(deviceAddress: String) {
-        val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
-        device?.let {
-            val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-            val thread = ConnectThread(uuid, device)
-
-            if (thread.isAlive) {
-                thread.cancel()
-                return
+        bluetoothAdapter?.let { adapter ->
+            // 기기 검색을 수행중이라면 취소
+            if (adapter.isDiscovering) {
+                adapter.cancelDiscovery()
             }
 
-            thread.run()
-            showMessage(this, "${device.name}과 연결되었습니다.")
+            // 서버의 역할을 수행 할 Device 획득
+            val device = adapter.getRemoteDevice(deviceAddress)
+            // UUID 선언
+            val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+            try {
+                val thread = ConnectThread(uuid, device)
 
-            return
+                thread.run()
+                showMessage(this, "${device.name}과 연결되었습니다.")
+            } catch (e: Exception) { // 연결에 실패할 경우 호출됨
+                showMessage(this, "기기의 전원이 꺼져 있습니다. 기기를 확인해주세요.")
+                return
+            }
         }
-
-        showMessage(this, "잘못된 Device 입니다.")
     }
 
 
@@ -275,85 +304,6 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
         } catch (e: Exception) {
             showMessage(this, e.message.toString())
             null
-        }
-    }
-
-    // Client Thread
-    @SuppressLint("MissingPermission")
-    private inner class ConnectThread(myUUid: UUID, device: BluetoothDevice) : Thread() {
-        val connectSocket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
-            device.createRfcommSocketToServiceRecord(myUUid)
-        }
-
-        override fun run() {
-            bluetoothAdapter?.cancelDiscovery()
-
-            try {
-                connectSocket?.let { socket ->
-                    socket.connect()
-                    Log.d(
-                        TAG,
-                        "SOCKET : ${connectSocket?.isConnected} - $connectSocket - ${connectSocket?.remoteDevice} - ${connectSocket?.inputStream}"
-                    )
-                    val connectedThread = ConnectedThread(socket)
-                    connectedThread.start()
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, e.message.toString())
-            }
-        }
-
-        fun cancel() {
-            try {
-                connectSocket?.close()
-            } catch (e: Exception) {
-                setLog(TAG, e.message.toString())
-            }
-        }
-    }
-
-    private inner class ConnectedThread(socket: BluetoothSocket) : Thread() {
-        private lateinit var inputStream: InputStream
-        private lateinit var outputStream: OutputStream
-        private var buffer = ByteArray(1024)
-
-        init {
-            try {
-                inputStream = socket.inputStream
-                outputStream = socket.outputStream
-            } catch (e: Exception) {
-                setLog(TAG, e.message.toString())
-            }
-        }
-
-        override fun run() {
-            var numBytes: Int
-            while(true) {
-                try {
-                    sleep(100)
-                    numBytes = inputStream.available()
-
-                    if(numBytes > 0) {
-                        buffer = ByteArray(numBytes)
-                        numBytes = inputStream.read(buffer, 0, numBytes)
-                    }
-                    for(i in 0 until numBytes) {
-                        print(buffer[i])
-                    }
-                    println()
-
-                } catch(e: Exception) {
-                    setLog(TAG, e.message.toString())
-                }
-            }
-        }
-
-        fun write(input: String) {
-            try {
-                val bytes = input.toByteArray()
-                outputStream.write(bytes)
-            } catch (e: Exception) {
-            }
         }
     }
 
@@ -390,6 +340,6 @@ class MainActivity @Inject constructor() : AppCompatActivity() {
             }
         }
 
-        unregisterReceiver(broadcastReceiver)
+        unregisterReceiver(bluetoothBroadcastReceiver)
     }
 }
