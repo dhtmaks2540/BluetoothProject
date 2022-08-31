@@ -1,8 +1,8 @@
-package com.example.bluetoothproject
+package com.example.bleapp
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class MyApplication: Application() {
+class MainApplication: Application() {
 }
