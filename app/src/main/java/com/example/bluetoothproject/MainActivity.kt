@@ -55,6 +55,12 @@ class MainActivity: AppCompatActivity() {
     }
 
     private fun init() {
+        // BluetoothAdapter가 Null이라면 블루투스를 지원하지 않는 것이므로 종료
+        if(bluetoothAdapter == null) {
+            showMessage(this, "블루투스를 지원하지 않는 장비입니다.")
+            finish()
+        }
+
         // binding 초기화
         binding = DataBindingUtil.setContentView<ActivityMainBinding?>(this, R.layout.activity_main)
             .apply {
@@ -184,9 +190,7 @@ class MainActivity: AppCompatActivity() {
             } else { // 활성 상태라면
                 showMessage(this, "이미 활성화 되어 있습니다")
             }
-            return
         }
-        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
     // 비활성화 요청
@@ -202,10 +206,7 @@ class MainActivity: AppCompatActivity() {
                 showMessage(this, "블루투스를 비활성화 하였습니다")
             }
 
-            return
         }
-
-        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
     // 페어링된 디바이스 검색
@@ -229,11 +230,7 @@ class MainActivity: AppCompatActivity() {
             } else {
                 showMessage(this, "블루투스가 비활성화 되어 있습니다.")
             }
-
-            return
         }
-
-        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
     // 기기 검색
@@ -257,10 +254,7 @@ class MainActivity: AppCompatActivity() {
             } else {
                 showMessage(this, "블루투스가 비활성화되어 있습니다")
             }
-            return
         }
-
-        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
     // 디바이스에 연결
@@ -320,6 +314,7 @@ class MainActivity: AppCompatActivity() {
             }
         }
 
+        // BroadcastReceiver 등록 해제
         unregisterReceiver(bluetoothBroadcastReceiver)
     }
 }
