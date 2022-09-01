@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         init()
     }
 
+<<<<<<< HEAD
     override fun onDestroy() {
         super.onDestroy()
         bluetoothAdapter?.let {
@@ -89,6 +90,26 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_SCAN)
                 }
+=======
+    private fun init() {
+        // BluetoothAdapter가 Null이라면 블루투스를 지원하지 않는 것이므로 종료
+        if(bluetoothAdapter == null) {
+            showMessage(this, "블루투스를 지원하지 않는 장비입니다.")
+            finish()
+        }
+
+        // binding 초기화
+        binding = DataBindingUtil.setContentView<ActivityMainBinding?>(this, R.layout.activity_main)
+            .apply {
+                handler = this@MainActivity
+                arrayAdapter = adapter
+                lvDevice.onItemClickListener =
+                    AdapterView.OnItemClickListener { _, _, position, _ ->
+                        adapter.getItem(position)?.second?.let {
+                            connectDevice(it)
+                        }
+                    }
+>>>>>>> 21a792d9eadb10e6f0cbbc5d353d8e28e8b52ab7
             }
         }
 
@@ -236,6 +257,10 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 21a792d9eadb10e6f0cbbc5d353d8e28e8b52ab7
         }
     }
 
@@ -323,8 +348,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+<<<<<<< HEAD
     private fun getIntentFilter() = IntentFilter().apply {
         addAction(BluetoothDevice.ACTION_FOUND)
         addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+=======
+        // BroadcastReceiver 등록 해제
+        unregisterReceiver(bluetoothBroadcastReceiver)
+>>>>>>> 21a792d9eadb10e6f0cbbc5d353d8e28e8b52ab7
     }
 }
