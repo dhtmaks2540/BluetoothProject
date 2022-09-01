@@ -4,6 +4,7 @@ import android.Manifest
 import android.bluetooth.*
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import androidx.databinding.DataBindingUtil
 import com.example.bleapp.databinding.ActivityMainBinding
 import dagger.hilt.android.AndroidEntryPoint
@@ -31,13 +33,25 @@ class MainActivity : AppCompatActivity() {
         const val DEVICE_NAME = "name"
         const val DEVICE_ADDRESS = "address"
     }
-    private lateinit var binding: ActivityMainBinding
-    
-    // BluetoothManager, BluetoothAdapter, BluetoothLeScanner 초기화
-    private val bluetoothManager: BluetoothManager by lazy {
-        getSystemService(BluetoothManager::class.java)
+
+    // DataBinding
+    private val binding: ActivityMainBinding by lazy {
+        DataBindingUtil.setContentView(this, R.layout.activity_main)
     }
+
+    // Permission Check
+    private val isPermissionGranted
+        get() = hasPermission(
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION)
+            } else {
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
+        )
+    
+    // BluetoothAdapter, BluetoothLeScanner 초기화
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
     private val bluetoothLeScanner: BluetoothLeScanner? by lazy {
@@ -66,8 +80,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private lateinit var gattCallback: BluetoothGattCallback
-
     private val activityResultLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == RESULT_OK) {
@@ -83,8 +95,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = DataBindingUtil.setContentView(this, R.layout.activity_main)
-        
+
         // BLE를 지원하지 않는 기기라면 종료
         if(!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             showMessage(this, "BLE를 지원하지 않는 기기입니다.")
@@ -107,17 +118,26 @@ class MainActivity : AppCompatActivity() {
     ) {
         when(requestCode) {
             BLUETOOTH_PERMISSION -> {
-                if(grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED
-                    && grantResults[2] == PackageManager.PERMISSION_GRANTED && grantResults[3] == PackageManager.PERMISSION_GRANTED) {
-                    setUi(true)
-                } else {
-                    setUi(false)
+                if(grantResults.isNotEmpty()) {
+                    if(grantResults.any { it == PackageManager.PERMISSION_DENIED }) {
+                        showMessage(this, "권한을 허용하지 않아 앱이 종료됩니다.")
+                        finish()
+                    }
                 }
             }
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
+    override fun onResume() {
+        super.onResume()
+
+        bluetoothAdapter?.let {
+            if(!it.isEnabled) setActivate()
+        }
+    }
+
+    // 초기화
     private fun init() {
         binding.apply {
             handler = this@MainActivity
@@ -127,81 +147,58 @@ class MainActivity : AppCompatActivity() {
                     val intent = Intent(this@MainActivity, ConnectActivity::class.java)
                     intent.putExtra(DEVICE_NAME, it.first)
                     intent.putExtra(DEVICE_ADDRESS, it.second)
-                    setLog(TAG, "Name : ${it.first}, Address : ${it.second}")
                     startActivity(intent)
                 }
             }
         }
 
-        handler = Handler(Looper.getMainLooper())
         setBluetooth()
+        handler = Handler(Looper.getMainLooper())
     }
 
     // 초기 권한 확인
     private fun setBluetooth() {
-        if (checkPermission()) {
-            setUi(true)
-        } else {
+        if (!isPermissionGranted) {
             requestPermission()
         }
     }
 
-    // 권한에 따른 UI 분기
-    private fun setUi(flag: Boolean) {
-        binding.apply {
-            btnActivate.isEnabled = flag
-            btnDeactivate.isEnabled = flag
-        }
-    }
-
-    // 권한확인
-    private fun checkPermission() =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) == PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(
-                        this,
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            false
-        }
-
     // 권한요청
     private fun requestPermission() {
-        if (!checkPermission()) {
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val permissions = arrayOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+
+            requestPermissions(permissions, BLUETOOTH_PERMISSION)
+        } else {
+            val permissions = arrayOf(
                 Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.ACCESS_FINE_LOCATION
             )
 
-            ActivityCompat.requestPermissions(this, permissions, BLUETOOTH_PERMISSION)
+            requestPermissions(permissions, BLUETOOTH_PERMISSION)
         }
-    }
-
-    private fun connGatt(device: BluetoothDevice?) {
-        val bluetoothGatt = device?.connectGatt(this, false, gattCallback)
-        setLog(TAG, bluetoothGatt?.device.toString())
     }
 
     // 활성화 요청
     fun setActivate() {
         bluetoothAdapter?.let {
-            // 비활성화 상태라면
-            if (!it.isEnabled) {
-                // 활성화 요청
-                val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                activityResultLauncher.launch(intent)
-            } else { // 활성 상태라면
-                showMessage(this, "이미 활성화 되어 있습니다")
+            if(!isPermissionGranted) {
+                requestPermission()
+            } else {
+                // 비활성화 상태라면
+                if (!it.isEnabled) {
+                    // 활성화 요청
+                    val intent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                    activityResultLauncher.launch(intent)
+                } else { // 활성 상태라면
+                    showMessage(this, "이미 활성화 되어 있습니다")
+                }
             }
-            return
         }
-        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
     // 비활성화 요청
@@ -213,36 +210,48 @@ class MainActivity : AppCompatActivity() {
                 // 활성 상태라면
             } else {
                 // 블루투스 비활성화
-                it.disable()
-                showMessage(this, "블루투스를 비활성화 하였습니다")
+                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if(!isPermissionGranted) {
+                        requestPermission()
+                    } else {
+                        it.disable()
+                        showMessage(this, "블루투스를 비활성화 하였습니다")
+                    }
+                }
             }
-
-            return
         }
-
-        showMessage(this, "블루투스를 지원하지 않는 장치")
     }
 
+    // BLE 기기 검색
     fun scanLeDevice() {
-        // 블루투스가 활성화되어 있지 않다면 return
-        bluetoothAdapter?.let {
-            if(!it.isEnabled) return
-        }
-        // 스캔하지 않고 있다면
-        if(!scanning) {
-            handler.postDelayed({
+        // 권한이 허용되어 있지 않다면
+        if(!isPermissionGranted) {
+            requestPermission()
+        } else {
+            // 블루투스가 활성화되어 있지 않다면 return
+            bluetoothAdapter?.let {
+                if(!it.isEnabled) {
+                    showMessage(this, "블루투스가 활성화되어 있지 않습니다.")
+                    return
+                }
+            }
+            // 스캔하지 않고 있다면
+            if(!scanning) {
+                handler.postDelayed({
+                    scanning = false
+                    bluetoothLeScanner?.stopScan(leScanCallback)
+                }, SCAN_PERIOD)
+
+                adapter.clear()
+
+                scanning = true
+
+                bluetoothLeScanner?.startScan(leScanCallback)
+                showMessage(this, "기기를 검색합니다.")
+            } else {
                 scanning = false
                 bluetoothLeScanner?.stopScan(leScanCallback)
-            }, SCAN_PERIOD)
-
-            adapter.clear()
-            
-            scanning = true
-            bluetoothLeScanner?.startScan(leScanCallback)
-            showMessage(this, "기기를 검색합니다.")
-        } else {
-            scanning = false
-            bluetoothLeScanner?.stopScan(leScanCallback)
+            }
         }
     }
 }
