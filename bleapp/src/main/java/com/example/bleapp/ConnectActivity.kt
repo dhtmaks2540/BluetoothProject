@@ -32,6 +32,9 @@ class ConnectActivity : AppCompatActivity() {
             }
         }
 
+    private var writeCharacteristic: BluetoothGattCharacteristic? = null
+    private var notifyCharacteristic: BluetoothGattCharacteristic? = null
+
     // 서비스 바인딩 상태에 따라서 호출되는 콜백 메서드를 가지는 객체
     private val serviceConnection = object : ServiceConnection {
         // 서비스에 연결이 되었을 때
@@ -130,29 +133,24 @@ class ConnectActivity : AppCompatActivity() {
     private fun displayGattServices(gattServices: List<BluetoothGattService>?) {
         if(gattServices == null) return
 
-        var uuid: String?
-        val gattServiceData: MutableList<HashMap<String, String>> = mutableListOf()
-        val gattCharacteristicData: MutableList<ArrayList<HashMap<String, String>>> = mutableListOf()
-        val gattCharacteristics: MutableList<ArrayList<BluetoothGattCharacteristic>> = mutableListOf()
-
-        gattServices.forEach { gattService ->
-            val currentServiceData = HashMap<String, String>()
-            uuid = gattService.uuid.toString()
-            setLog(TAG, uuid)
-        }
-    }
-
-    private fun updateConnectionState(connected: Boolean) {
-        runOnUiThread {
-            binding.apply {
-                if (connected) {
-                    tvState.text = "연결"
-                    btnDisconnect.text = "연결 해제"
-                } else {
-                    tvState.text = "연결 해제"
-                    btnDisconnect.text = "연결"
+        gattServices.forEach { service ->
+            val characteristicsTable = service.characteristics.joinToString(
+                separator = "\\n|--",
+                prefix = "|--",
+            ) { char ->
+                var description = "${char.uuid}: ${char.printProperties()}"
+                if(char.descriptors.isNotEmpty()) {
+                    description += "\n" + char.descriptors.joinToString(
+                        separator = "\\n|------",
+                        prefix = "|------"
+                    ) { descriptor ->
+                        "${descriptor.uuid}: ${descriptor.printProperties()}"
+                    }
                 }
+
+                description
             }
+            setLog(TAG, "Service ${service.uuid}\nCharacteristics:\n$characteristicsTable")
         }
     }
 

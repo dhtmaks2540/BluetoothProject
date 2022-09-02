@@ -5,6 +5,7 @@ import android.app.Service
 import android.bluetooth.*
 import android.content.Context
 import android.content.Intent
+import android.net.wifi.aware.Characteristics
 import android.os.Binder
 import android.os.IBinder
 import dagger.hilt.android.AndroidEntryPoint
@@ -17,22 +18,23 @@ class BluetoothLeService : Service() {
         const val ACTION_GATT_CONNECTED = "com.example.bluetooth.le.ACTION_GATT_CONNECTED"
         // 연결 해제
         const val ACTION_GATT_DISCONNECTED = "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED"
+        const val CONNECTION_ERROR = 133
         const val ACTION_GATT_SERVICES_DISCOVERED =
             "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED"
         const val ACTION_DATA_AVAILABLE = "com.example.bluetooth.le.ACTION_DATA_AVAILABLE"
         const val EXTRA_DATA = "com.example.bluetooth.le.EXTRA_DATA"
         const val UUID = "00002a37-0000-1000-8000-00805f9b34fb"
+
+        val UUID_DATA_NOTIFY = java.util.UUID.fromString("0000fff1-0000-1000-80000-00805f9b34fb")
+        val UUID_DATA_WRITE = java.util.UUID.fromString("0000fff2-0000-1000-80000-00805f9b34fb")
+        val CLIENT_CHARACTERISTIC_CONFIG = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
-    private lateinit var bluetoothManager: BluetoothManager
-    private var bluetoothAdapter: BluetoothAdapter? = null
+    private val bluetoothAdapter: BluetoothAdapter? by lazy {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothManager.adapter
+    }
     private var bluetoothGatt: BluetoothGatt? = null
-
-    override fun onCreate() {
-        super.onCreate()
-        bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE)
-                as BluetoothManager
-    }
 
     // BluetoothGattCallback
     private val gattCallback = object : BluetoothGattCallback() {
@@ -55,16 +57,34 @@ class BluetoothLeService : Service() {
                     val intentAction = ACTION_GATT_DISCONNECTED
                     broadcastUpdate(intentAction)
                 }
+                else -> {
+                    setLog(TAG, "연결하는데 오류가 발생하였습니다.")
+                    close()
+                }
             }
         }
 
         // 서비스 발견
+        @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             super.onServicesDiscovered(gatt, status)
 
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
                     broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
+                    val services = gatt?.services
+                    services?.forEach { service ->
+                        val characteristics = service.characteristics
+                        characteristics.forEach { characteristic ->
+                            if(characteristic.isReadable()) {
+                                gatt.readCharacteristic(characteristic)
+                            }
+
+                            if(characteristic.isNotifiable()) {
+                                gatt.setCharacteristicNotification(characteristic, true)
+                            }
+                        }
+                    }
                     setLog(TAG, "ACTION_GATT_SERVICES_DISCOVERED")
                 }
                 else -> {
@@ -97,14 +117,18 @@ class BluetoothLeService : Service() {
             characteristic: BluetoothGattCharacteristic?
         ) {
             super.onCharacteristicChanged(gatt, characteristic)
+            setLog(TAG, "Device : ${gatt?.device}, characteristic : $characteristic")
             broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            super.onMtuChanged(gatt, mtu, status)
         }
     }
 
     // 초기화
     fun initialize(): Boolean {
         // BluetoothAdapter 체크
-        bluetoothAdapter = bluetoothManager.adapter
         bluetoothAdapter ?: run {
             setLog(TAG, "BluetoothAdapter 획득 오류")
             return false
@@ -163,9 +187,10 @@ class BluetoothLeService : Service() {
 
     @SuppressLint("MissingPermission")
     fun setCharacteristicNotification(characteristic: BluetoothGattCharacteristic, enabled: Boolean) {
-        bluetoothGatt?.setCharacteristicNotification(characteristic, enabled) ?: run {
-            setLog(TAG, "BluetoothAdapter가 초기화되지 않았습니다.")
-            return
+        bluetoothGatt?.let {
+            it.setCharacteristicNotification(characteristic, enabled)
+        } ?: run {
+            setLog(TAG, "BluetoothGatt 초기화 X")
         }
     }
 
