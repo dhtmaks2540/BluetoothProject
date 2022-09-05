@@ -5,10 +5,11 @@ import android.app.Service
 import android.bluetooth.*
 import android.content.Context
 import android.content.Intent
-import android.net.wifi.aware.Characteristics
 import android.os.Binder
 import android.os.IBinder
+import com.example.bleapp.ble.*
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.*
 
 @AndroidEntryPoint
 class BluetoothLeService : Service() {
@@ -18,16 +19,15 @@ class BluetoothLeService : Service() {
         const val ACTION_GATT_CONNECTED = "com.example.bluetooth.le.ACTION_GATT_CONNECTED"
         // 연결 해제
         const val ACTION_GATT_DISCONNECTED = "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED"
-        const val CONNECTION_ERROR = 133
         const val ACTION_GATT_SERVICES_DISCOVERED =
             "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED"
         const val ACTION_DATA_AVAILABLE = "com.example.bluetooth.le.ACTION_DATA_AVAILABLE"
-        const val EXTRA_DATA = "com.example.bluetooth.le.EXTRA_DATA"
-        const val UUID = "00002a37-0000-1000-8000-00805f9b34fb"
 
-        val UUID_DATA_NOTIFY = java.util.UUID.fromString("0000fff1-0000-1000-80000-00805f9b34fb")
-        val UUID_DATA_WRITE = java.util.UUID.fromString("0000fff2-0000-1000-80000-00805f9b34fb")
-        val CLIENT_CHARACTERISTIC_CONFIG = java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        val GENERIC_ACCESS = UUID.fromString("00001801-0000-1000-8000-00805f9b34fb")
+        val GENERIC_ATTRIBUTES = UUID.fromString("00001800-0000-1000-8000-00805f9b34fb")
+        val DEVICE_INFORMATION = UUID.fromString("0000180a-0000-1000-8000-00805f9b34fb")
+        val UNKNOWN_SERVICE_1 = UUID.fromString("581f3b86-6e63-48cc-a618-288167d2c4a2")
+        val UNKNOWN_SERVICE_2 = UUID.fromString("1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0")
     }
 
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
@@ -43,6 +43,8 @@ class BluetoothLeService : Service() {
         override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
             super.onConnectionStateChange(gatt, status, newState)
 
+            setLog(TAG, "onConnectionStateChange : $status $newState")
+
             when (newState) {
                 // GATT Server에 연결이 되었을 때
                 BluetoothProfile.STATE_CONNECTED -> {
@@ -50,7 +52,6 @@ class BluetoothLeService : Service() {
                     broadcastUpdate(intentAction)
                     // 연결에 성공한 후 services 검색
                     bluetoothGatt?.discoverServices()
-                    setLog(TAG, "STATE_CONNECTED")
                 }
                 // Gatt Server에 연결이 끊겼을 때
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -58,33 +59,50 @@ class BluetoothLeService : Service() {
                     broadcastUpdate(intentAction)
                 }
                 else -> {
-                    setLog(TAG, "연결하는데 오류가 발생하였습니다.")
                     close()
                 }
             }
         }
 
-        // 서비스 발견
+        // 원격 기기의 service, characteristic, descriptor가 업데이트 될때 트리거
+        // 즉, 새로운 service가 발견될 때 트리거
         @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             super.onServicesDiscovered(gatt, status)
 
+
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
+                    val gattServices = gatt?.services
                     broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
-                    val services = gatt?.services
-                    services?.forEach { service ->
-                        val characteristics = service.characteristics
-                        characteristics.forEach { characteristic ->
-                            if(characteristic.isReadable()) {
-                                gatt.readCharacteristic(characteristic)
+                    gattServices?.forEach { service ->
+                        val characteristicsTable = service.characteristics.joinToString(
+                            separator = "\\n|--",
+                            prefix = "|--",
+                        ) { char ->
+                            var description = "${char.uuid}: ${char.printProperties()}"
+                            if(char.descriptors.isNotEmpty()) {
+                                description += "\n" + char.descriptors.joinToString(
+                                    separator = "\\n|------",
+                                    prefix = "|------"
+                                ) { descriptor ->
+                                    "${descriptor.uuid}: ${descriptor.printProperties()}"
+                                }
                             }
 
-                            if(characteristic.isNotifiable()) {
-                                gatt.setCharacteristicNotification(characteristic, true)
-                            }
+                            description
                         }
+                        setLog(TAG, "Service ${service.uuid}\nCharacteristics:\n$characteristicsTable")
                     }
+
+                    val notifiableUUID = UUID.fromString("581f3b86-6e63-48cc-a618-288167d2c4a3")
+                    val notifiableCharacteristic = bluetoothGatt?.getService(UNKNOWN_SERVICE_1)?.getCharacteristic(notifiableUUID)
+                    if(notifiableCharacteristic?.isNotifiable() == true) {
+                        setLog(TAG, "isNotifiable")
+                    } else {
+                        setLog(TAG, "NO!!!")
+                    }
+                    enableNotifications(notifiableCharacteristic)
                     setLog(TAG, "ACTION_GATT_SERVICES_DISCOVERED")
                 }
                 else -> {
@@ -93,7 +111,7 @@ class BluetoothLeService : Service() {
             }
         }
 
-        // 데이터 읽기
+        // characteristic 읽기 작업의 결과를 보고할 때 트리거
         override fun onCharacteristicRead(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic?,
@@ -101,28 +119,54 @@ class BluetoothLeService : Service() {
         ) {
             super.onCharacteristicRead(gatt, characteristic, status)
 
-            when (status) {
-                BluetoothGatt.GATT_SUCCESS -> {
-                    setLog(TAG, "onCharacteristicRead - GATT_SUCCESS")
-                    broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
-                }
-                BluetoothGatt.GATT_FAILURE -> {
-                    setLog(TAG, "onCharacteristicRead - GATT_FAILURE")
+            with(characteristic) {
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        setLog(TAG, "Read characteristic ${this?.uuid}\n${this?.value?.toHexString()} - ${this?.value?.size}")
+                        broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
+                    }
+                    BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
+                        setLog(TAG, "Read not permitted ${this?.uuid}!")
+                    }
+                    else -> {
+                        setLog(TAG, "Characteristic read failed for ${this?.uuid}, error: $status")
+                    }
                 }
             }
         }
 
+        //  characteristic 알림의 결과로 트리거.
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic?
         ) {
             super.onCharacteristicChanged(gatt, characteristic)
-            setLog(TAG, "Device : ${gatt?.device}, characteristic : $characteristic")
+            setLog(TAG, "onCharacteristicChanged: ${characteristic?.getStringValue(0)}")
             broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
             super.onMtuChanged(gatt, mtu, status)
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            with(characteristic) {
+                when(status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        setLog(TAG, "BluetoothGattCallback Wrote to characteristic ${this?.uuid} | value: ${this?.value?.toHexString()}\"")
+                    }
+                    BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
+                        setLog(TAG, "BluetoothGattCallback Write not permitted for ${this?.uuid}!")
+                    }
+                    else -> {
+                        setLog(TAG, "BluetoothGattCallback Characteristic write failed for ${this?.uuid}, error: $status")
+                    }
+                }
+            }
         }
     }
 
@@ -177,21 +221,95 @@ class BluetoothLeService : Service() {
         }
     }
 
+//    @SuppressLint("MissingPermission")
+//    fun readCharacteristic(characteristic: BluetoothGattCharacteristic) {
+//        bluetoothGatt?.readCharacteristic(characteristic) ?: run {
+//            setLog(TAG, "BluetoothAdapter가 초기화되지 않았습니다.")
+//            return
+//        }
+//    }
+
     @SuppressLint("MissingPermission")
-    fun readCharacteristic(characteristic: BluetoothGattCharacteristic) {
-        bluetoothGatt?.readCharacteristic(characteristic) ?: run {
-            setLog(TAG, "BluetoothAdapter가 초기화되지 않았습니다.")
-            return
+    private fun readData() {
+        val genericAttributeCharUUID = UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb")
+        val genericAttributeChar = bluetoothGatt?.getService(GENERIC_ATTRIBUTES)?.getCharacteristic(genericAttributeCharUUID)
+        val genericAttributeCharUUID2 = UUID.fromString("00002a01-0000-1000-8000-00805f9b34fb")
+        val genericAttributeChar2 = bluetoothGatt?.getService(GENERIC_ATTRIBUTES)?.getCharacteristic(genericAttributeCharUUID2)
+
+        if(genericAttributeChar?.isReadable() == true) {
+            setLog(TAG,"READABLE")
+            bluetoothGatt?.readCharacteristic(genericAttributeChar2)
+        } else {
+            setLog(TAG, "NOT READABLE")
         }
     }
 
     @SuppressLint("MissingPermission")
-    fun setCharacteristicNotification(characteristic: BluetoothGattCharacteristic, enabled: Boolean) {
-        bluetoothGatt?.let {
-            it.setCharacteristicNotification(characteristic, enabled)
-        } ?: run {
-            setLog(TAG, "BluetoothGatt 초기화 X")
+    fun writeCharacteristic(characteristic: BluetoothGattCharacteristic?, payload: ByteArray) {
+        characteristic?.let {
+            val writeType = when {
+                characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                characteristic.isWritableWithoutResponse() -> BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                else -> error("Characteristic ${characteristic.uuid} cannot be written to")
+            }
+
+            setLog(TAG, "WRITE : $writeType")
+
+            bluetoothGatt?.let { gatt ->
+                characteristic.writeType = writeType
+                characteristic.value = payload
+                gatt.writeCharacteristic(characteristic)
+            } ?: error("Not connected to a BLE device!")
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun writeDescriptor(descriptor: BluetoothGattDescriptor, payload: ByteArray) {
+        bluetoothGatt?.let { gatt ->
+            descriptor.value = payload
+            gatt.writeDescriptor(descriptor)
+        } ?: error("Not connected to a BLE device!")
+    }
+
+    @SuppressLint("MissingPermission")
+    fun enableNotifications(characteristic: BluetoothGattCharacteristic?) {
+        characteristic?.let {
+            val cccdUUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+            val payload = when {
+                characteristic.isIndicatable() -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                characteristic.isNotifiable() -> BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                else -> {
+                    setLog(TAG, "${characteristic.uuid} doesn't support notifications/indications")
+                    return
+                }
+            }
+
+            characteristic.getDescriptor(cccdUUID)?.let { cccDescriptor ->
+                if(bluetoothGatt?.setCharacteristicNotification(characteristic, true) == false) {
+                    setLog(TAG, "setCharacteristicNotification failed for ${characteristic.uuid}")
+                    return
+                }
+
+                writeDescriptor(cccDescriptor, payload)
+            } ?: setLog(TAG, "${characteristic.uuid} doesn't contain the CCC descriptor!")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun disableNotifications(characteristic: BluetoothGattCharacteristic) {
+        if(!characteristic.isNotifiable() && !characteristic.isIndicatable()) {
+            setLog(TAG, "${characteristic.uuid} doesn't support indications/notifications")
+            return
+        }
+
+        val cccUuid = UUID.fromString("581f3b86-6e63-48cc-a618-288167d2c4a5")
+        characteristic.getDescriptor(cccUuid)?.let { cccDescriptor ->
+            if(bluetoothGatt?.setCharacteristicNotification(characteristic, false) == false) {
+                setLog(TAG, "setCharacteristicNotification failed for ${characteristic.uuid}")
+                return
+            }
+            writeDescriptor(cccDescriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+        } ?: setLog(TAG, "${characteristic.uuid} doesn't contain the CCC descriptor!")
     }
 
     fun getSupportedGattServices(): List<BluetoothGattService>? {
@@ -207,11 +325,21 @@ class BluetoothLeService : Service() {
         action: String,
         characteristic: BluetoothGattCharacteristic? = null
     ) {
+        val intent = Intent(action)
         // characteristic가 null이 아니라면
         characteristic?.let {
+            val flag = it.properties
+            var format = 0
+            if((flag and 0x01) != 0) {
+                format = BluetoothGattCharacteristic.FORMAT_UINT16
+            } else {
+                format = BluetoothGattCharacteristic.FORMAT_UINT8
+            }
 
+            val rate = it.getIntValue(format, 1)
+            intent.putExtra("DATA", rate)
+            sendBroadcast(intent)
         } ?: run { // null 이라면
-            val intent = Intent(action)
             sendBroadcast(intent)
         }
     }

@@ -1,12 +1,12 @@
 package com.example.bleapp
 
-import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
 import android.content.*
 import android.os.Bundle
 import android.os.IBinder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
+import com.example.bleapp.ble.printProperties
 import com.example.bleapp.databinding.ActivityConnectBinding
 
 class ConnectActivity : AppCompatActivity() {
@@ -31,9 +31,6 @@ class ConnectActivity : AppCompatActivity() {
                 }
             }
         }
-
-    private var writeCharacteristic: BluetoothGattCharacteristic? = null
-    private var notifyCharacteristic: BluetoothGattCharacteristic? = null
 
     // 서비스 바인딩 상태에 따라서 호출되는 콜백 메서드를 가지는 객체
     private val serviceConnection = object : ServiceConnection {
@@ -76,12 +73,13 @@ class ConnectActivity : AppCompatActivity() {
                 BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED -> {
                     setLog(TAG, "ACTION_GATT_SERVICES_DISCOVERED")
                     val services = bluetoothLeService?.getSupportedGattServices()
-                    if (services != null && services.isNotEmpty()) {
-                        displayGattServices(services)
-                    }
+//                    if (services != null && services.isNotEmpty()) {
+//                        displayGattServices(services)
+//                    }
                 }
                 BluetoothLeService.ACTION_DATA_AVAILABLE -> {
-                    setLog(TAG, "ACTION_DATA_AVAILABLE")
+                    val rate: Int = intent.getIntExtra("DATA", 0)
+                    setLog(TAG, "ACTION_DATA_AVAILABLE : $rate")
                 }
             }
         }
@@ -128,30 +126,6 @@ class ConnectActivity : AppCompatActivity() {
         val gattServerIntent = Intent(this, BluetoothLeService::class.java)
         // 서비스 bind
         bindService(gattServerIntent, serviceConnection, Context.BIND_AUTO_CREATE)
-    }
-
-    private fun displayGattServices(gattServices: List<BluetoothGattService>?) {
-        if(gattServices == null) return
-
-        gattServices.forEach { service ->
-            val characteristicsTable = service.characteristics.joinToString(
-                separator = "\\n|--",
-                prefix = "|--",
-            ) { char ->
-                var description = "${char.uuid}: ${char.printProperties()}"
-                if(char.descriptors.isNotEmpty()) {
-                    description += "\n" + char.descriptors.joinToString(
-                        separator = "\\n|------",
-                        prefix = "|------"
-                    ) { descriptor ->
-                        "${descriptor.uuid}: ${descriptor.printProperties()}"
-                    }
-                }
-
-                description
-            }
-            setLog(TAG, "Service ${service.uuid}\nCharacteristics:\n$characteristicsTable")
-        }
     }
 
     // IntentFilter 생성

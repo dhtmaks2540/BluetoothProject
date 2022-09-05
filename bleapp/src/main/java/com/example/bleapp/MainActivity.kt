@@ -1,11 +1,9 @@
 package com.example.bleapp
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.*
-import android.bluetooth.le.BluetoothLeScanner
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
-import android.bluetooth.le.ScanResult
+import android.bluetooth.le.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.ArrayAdapter
+import android.widget.ListAdapter
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
@@ -24,15 +23,32 @@ import androidx.databinding.DataBindingUtil
 import com.example.bleapp.databinding.ActivityMainBinding
 import dagger.hilt.android.AndroidEntryPoint
 
+@SuppressLint("MissingPermission")
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MAIN_ACTIVITY"
         private const val BLUETOOTH_PERMISSION = 1
-        private const val SCAN_PERIOD: Long = 15000
         const val DEVICE_NAME = "name"
         const val DEVICE_ADDRESS = "address"
     }
+
+    private var isScanning = false
+    private val scanResult = mutableListOf<ScanResult>()
+    private val scanResultAdapter: ScanResultAdapter by lazy {
+        if(isScanning) {
+            stopBleScan()
+        }
+        ScanResultAdapter(scanResultClicked = {
+            val intent = Intent(this, ConnectActivity::class.java)
+            intent.putExtra(DEVICE_NAME, it.device.name)
+            intent.putExtra(DEVICE_ADDRESS, it.device.address)
+            startActivity(intent)
+        })
+    }
+    private val scanSettings = ScanSettings.Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .build()
 
     // DataBinding
     private val binding: ActivityMainBinding by lazy {
@@ -42,13 +58,20 @@ class MainActivity : AppCompatActivity() {
     // Permission Check
     private val isPermissionGranted
         get() = hasPermission(
-            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.ACCESS_FINE_LOCATION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
             } else {
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
             }
         )
-    
+
     // BluetoothAdapter, BluetoothLeScanner 초기화
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -58,17 +81,25 @@ class MainActivity : AppCompatActivity() {
         bluetoothAdapter?.bluetoothLeScanner
     }
 
-    private var scanning = false
     private lateinit var handler: Handler
 
     // 스캔에 대한 결과를 Callback 해주는 객체
     private val leScanCallback: ScanCallback = object : ScanCallback() {
         // 스캔 성공 - > 결과
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
             super.onScanResult(callbackType, result)
-            result?.let {
-                if(it.device.name != null && it.device.address != null) {
-                    adapter.add(Pair(it.device.name, it.device.address))
+            val indexQuery = scanResult.indexOfFirst { it.device.address == result.device.address }
+
+            if (result.device.name != null && result.device.address != null) {
+                if (indexQuery != -1) {
+                    scanResult[indexQuery] = result
+                    scanResultAdapter.notifyItemChanged(indexQuery)
+                } else {
+                    with(result.device) {
+                        setLog(TAG, "Found BLE device! Name : ${name ?: "Unnamed"}, address : $address")
+                    }
+                    scanResult.add(result)
+                    scanResultAdapter.notifyItemInserted(scanResult.size - 1)
                 }
             }
         }
@@ -76,12 +107,13 @@ class MainActivity : AppCompatActivity() {
         // 스캔 실패
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
-            setLog(TAG, errorCode.toString())
+            setLog(TAG, "onScanFailed: code $errorCode")
         }
     }
 
     private val activityResultLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()) {
+        ActivityResultContracts.StartActivityForResult()
+    ) {
         if (it.resultCode == RESULT_OK) {
             showMessage(this, "블루투스 활성화")
         } else if (it.resultCode == RESULT_CANCELED) {
@@ -89,21 +121,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val adapter: ArrayAdapter<Pair<String, String>> by lazy {
-        ArrayAdapter(this, android.R.layout.simple_list_item_1)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // BLE를 지원하지 않는 기기라면 종료
-        if(!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             showMessage(this, "BLE를 지원하지 않는 기기입니다.")
             finish()
         }
 
         // 블루투스를 지원하지 않는 기기라면 종료
-        if(bluetoothAdapter == null) {
+        if (bluetoothAdapter == null) {
             showMessage(this, "블루투스를 지원하지 않는 기기입니다.")
             finish()
         }
@@ -116,10 +144,10 @@ class MainActivity : AppCompatActivity() {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        when(requestCode) {
+        when (requestCode) {
             BLUETOOTH_PERMISSION -> {
-                if(grantResults.isNotEmpty()) {
-                    if(grantResults.any { it == PackageManager.PERMISSION_DENIED }) {
+                if (grantResults.isNotEmpty()) {
+                    if (grantResults.any { it == PackageManager.PERMISSION_DENIED }) {
                         showMessage(this, "권한을 허용하지 않아 앱이 종료됩니다.")
                         finish()
                     }
@@ -133,7 +161,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
 
         bluetoothAdapter?.let {
-            if(!it.isEnabled) setActivate()
+            if (!it.isEnabled) setActivate()
         }
     }
 
@@ -141,17 +169,18 @@ class MainActivity : AppCompatActivity() {
     private fun init() {
         binding.apply {
             handler = this@MainActivity
-            arrayAdapter = adapter
-            lvDevice.setOnItemClickListener { _, _, position, _ ->
-                adapter.getItem(position)?.let {
-                    val intent = Intent(this@MainActivity, ConnectActivity::class.java)
-                    intent.putExtra(DEVICE_NAME, it.first)
-                    intent.putExtra(DEVICE_ADDRESS, it.second)
-                    startActivity(intent)
+            adapter = scanResultAdapter
+
+            btnSearch.setOnClickListener {
+                if(isScanning) {
+                    stopBleScan()
+                } else {
+                    scanLeDevice()
                 }
             }
         }
 
+        scanResultAdapter.submitList(scanResult)
         setBluetooth()
         handler = Handler(Looper.getMainLooper())
     }
@@ -165,7 +194,7 @@ class MainActivity : AppCompatActivity() {
 
     // 권한요청
     private fun requestPermission() {
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val permissions = arrayOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_SCAN,
@@ -186,7 +215,7 @@ class MainActivity : AppCompatActivity() {
     // 활성화 요청
     fun setActivate() {
         bluetoothAdapter?.let {
-            if(!isPermissionGranted) {
+            if (!isPermissionGranted) {
                 requestPermission()
             } else {
                 // 비활성화 상태라면
@@ -210,8 +239,8 @@ class MainActivity : AppCompatActivity() {
                 // 활성 상태라면
             } else {
                 // 블루투스 비활성화
-                if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if(!isPermissionGranted) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (!isPermissionGranted) {
                         requestPermission()
                     } else {
                         it.disable()
@@ -225,33 +254,27 @@ class MainActivity : AppCompatActivity() {
     // BLE 기기 검색
     fun scanLeDevice() {
         // 권한이 허용되어 있지 않다면
-        if(!isPermissionGranted) {
+        if (!isPermissionGranted) {
             requestPermission()
         } else {
             // 블루투스가 활성화되어 있지 않다면 return
             bluetoothAdapter?.let {
-                if(!it.isEnabled) {
+                if (!it.isEnabled) {
                     showMessage(this, "블루투스가 활성화되어 있지 않습니다.")
                     return
                 }
             }
             // 스캔하지 않고 있다면
-            if(!scanning) {
-                handler.postDelayed({
-                    scanning = false
-                    bluetoothLeScanner?.stopScan(leScanCallback)
-                }, SCAN_PERIOD)
-
-                adapter.clear()
-
-                scanning = true
-
-                bluetoothLeScanner?.startScan(leScanCallback)
-                showMessage(this, "기기를 검색합니다.")
-            } else {
-                scanning = false
-                bluetoothLeScanner?.stopScan(leScanCallback)
+            if (!isScanning) {
+                scanResult.clear()
+                bluetoothLeScanner?.startScan(null, scanSettings, leScanCallback)
+                isScanning = true
             }
         }
+    }
+
+    private fun stopBleScan() {
+        bluetoothLeScanner?.stopScan(leScanCallback)
+        isScanning = false
     }
 }
