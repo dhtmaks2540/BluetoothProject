@@ -12,6 +12,7 @@ import java.util.*
 class ConnectThread(
     private val myUUID: UUID,
     private val device: BluetoothDevice,
+    private val connectViewModel: ConnectViewModel
 ) : Thread() {
     companion object {
         private const val TAG = "CONNECT_THREAD"
@@ -28,6 +29,10 @@ class ConnectThread(
 
     override fun run() {
         try {
+            if (connectedThread?.state == State.RUNNABLE) {
+                connectedThread?.cancel()
+            }
+
             // 연결 수행
             connectSocket?.connect()
             connectSocket?.let {
@@ -35,13 +40,7 @@ class ConnectThread(
             }
         } catch (e: IOException) { // 기기와의 연결이 실패할 경우 호출
             connectSocket?.close()
-            connectedThread?.let {
-                if(it.isAlive) {
-                    it.cancel()
-                }
-            }
-            setLog(TAG, e.message.toString())
-            throw Exception("연결 실패")
+            useTimber(e.message.toString())
         }
     }
 
@@ -49,35 +48,51 @@ class ConnectThread(
         try {
             connectSocket?.close()
         } catch (e: IOException) {
-            setLog(TAG, e.message.toString())
+            useTimber(e.message.toString())
         }
     }
 
     private inner class ConnectedThread(private val bluetoothSocket: BluetoothSocket?) : Thread() {
-        private var inputStream: InputStream? = null
-        private var outputStream: OutputStream? = null
+        private lateinit var inputStream: InputStream
+        private lateinit var outputStream: OutputStream
 
         init {
             try {
                 // BluetoothSocket의 InputStream, OutputStream 초기화
-                inputStream = bluetoothSocket?.inputStream
-                outputStream = bluetoothSocket?.outputStream
+                inputStream = bluetoothSocket?.inputStream!!
+                outputStream = bluetoothSocket.outputStream!!
             } catch (e: IOException) {
                 setLog(TAG, e.message.toString())
             }
         }
 
+        @OptIn(ExperimentalUnsignedTypes::class)
         override fun run() {
-            val buffer = ByteArray(1024)
-            var bytes: Int?
+            var buffer = ByteArray(1024)
+            var bytes: Int = 0
 
             while (true) {
                 try {
                     // 데이터 받기(읽기)
-                    bytes = inputStream?.read(buffer)
-                    setLog(TAG, bytes.toString())
+                    bytes = inputStream.available()
+                    if (bytes != 0) {
+                        buffer = ByteArray(bytes)
+                        bytes = inputStream.available()
+                        bytes = inputStream.read(buffer, 0, bytes)
+                        val uBuffer = buffer.toUByteArray()
+                        if(uBuffer.first().toInt() != 255 || uBuffer.first().toInt() == 254) {
+                            continue
+                        } else {
+//                            connectViewModel.setDataArray(uBuffer)
+                            val sb = StringBuilder()
+                            uBuffer.forEach { byte ->
+                                sb.append("$byte ")
+                            }
+                            useTimber(sb.toString())
+                        }
+                    }
                 } catch (e: Exception) { // 기기와의 연결이 끊기면 호출
-                    setLog(TAG, "기기와의 연결이 끊겼습니다.")
+                    useTimber(e.message.toString())
                     break
                 }
             }
@@ -88,7 +103,7 @@ class ConnectThread(
                 // 데이터 전송
                 outputStream?.write(bytes)
             } catch (e: IOException) {
-                setLog(TAG, e.message.toString())
+                useTimber(e.message.toString())
             }
         }
 
@@ -96,7 +111,7 @@ class ConnectThread(
             try {
                 bluetoothSocket?.close()
             } catch (e: IOException) {
-                setLog(TAG, e.message.toString())
+                useTimber(e.message.toString())
             }
         }
     }

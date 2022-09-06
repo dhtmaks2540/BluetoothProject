@@ -1,6 +1,5 @@
 package com.example.bleapp
 
-import android.annotation.SuppressLint
 import android.bluetooth.le.ScanResult
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -31,7 +30,6 @@ class ScanResultAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(getItem(position))
     }
-
 
     inner class ViewHolder(private val binding: ItemScanResultBinding): RecyclerView.ViewHolder(binding.root) {
         fun bind(scanResult: ScanResult) {

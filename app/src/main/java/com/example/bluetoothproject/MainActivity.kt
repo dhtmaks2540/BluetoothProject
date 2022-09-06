@@ -1,9 +1,11 @@
 package com.example.bluetoothproject
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.ScanResult
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -23,15 +25,14 @@ import com.example.bluetoothproject.databinding.ActivityMainBinding
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.*
 
+@SuppressLint("MissingPermission")
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MAIN_ACTIVITY"
-        private const val BLUETOOTH_CONNECT = 1
-        private const val BLUETOOTH_SCAN = 2
-        private const val BLUETOOTH_PERMISSION = 100
     }
 
+    // 권한 확인
     private val isPermissionGranted
         get() = hasPermission(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -41,17 +42,21 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
+    // 데이터 바인딩
     private val binding: ActivityMainBinding by lazy {
         DataBindingUtil.setContentView(this, R.layout.activity_main)
     }
 
+    // 블루투스 어댑터
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
 
+    // 활성화 결과용
     private val activityResultLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()) {
+        ActivityResultContracts.StartActivityForResult()
+    ) {
         if (it.resultCode == RESULT_OK) {
             showMessage(this, "블루투스 활성화")
         } else if (it.resultCode == RESULT_CANCELED) {
@@ -59,9 +64,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val adapter: ArrayAdapter<Pair<String, String>> by lazy {
-        ArrayAdapter(this, android.R.layout.simple_list_item_1)
+    // RecyclerAdapter
+    private val recyclerAdapter: DeviceRecyclerAdapter by lazy {
+        DeviceRecyclerAdapter(deviceClicked = { device ->
+            val intent = Intent(this, ConnectActivity::class.java)
+            intent.putExtra(DEVICE_ADDRESS, device.address)
+            intent.putExtra(DEVICE_NAME, device.name)
+            startActivity(intent)
+        })
     }
+    private val deviceList = mutableListOf<BluetoothDevice>()
 
     // BroadcastReceiver
     private lateinit var bluetoothBroadcastReceiver: BroadcastReceiver
@@ -78,7 +90,6 @@ class MainActivity : AppCompatActivity() {
         init()
     }
 
-<<<<<<< HEAD
     override fun onDestroy() {
         super.onDestroy()
         bluetoothAdapter?.let {
@@ -90,26 +101,6 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_SCAN), BLUETOOTH_SCAN)
                 }
-=======
-    private fun init() {
-        // BluetoothAdapter가 Null이라면 블루투스를 지원하지 않는 것이므로 종료
-        if(bluetoothAdapter == null) {
-            showMessage(this, "블루투스를 지원하지 않는 장비입니다.")
-            finish()
-        }
-
-        // binding 초기화
-        binding = DataBindingUtil.setContentView<ActivityMainBinding?>(this, R.layout.activity_main)
-            .apply {
-                handler = this@MainActivity
-                arrayAdapter = adapter
-                lvDevice.onItemClickListener =
-                    AdapterView.OnItemClickListener { _, _, position, _ ->
-                        adapter.getItem(position)?.second?.let {
-                            connectDevice(it)
-                        }
-                    }
->>>>>>> 21a792d9eadb10e6f0cbbc5d353d8e28e8b52ab7
             }
         }
 
@@ -136,8 +127,8 @@ class MainActivity : AppCompatActivity() {
 
         when (requestCode) {
             BLUETOOTH_CONNECT -> {
-                if(grantResults.isNotEmpty()) {
-                    if(grantResults.any { it == PackageManager.PERMISSION_DENIED }) {
+                if (grantResults.isNotEmpty()) {
+                    if (grantResults.any { it == PackageManager.PERMISSION_DENIED }) {
                         showMessage(this, "권한이 허용되지 않았습니다.")
                         finish()
                     }
@@ -151,15 +142,11 @@ class MainActivity : AppCompatActivity() {
         setBluetooth()
 
         binding.apply {
+            adapter = recyclerAdapter
             handler = this@MainActivity
-            arrayAdapter = adapter
-            lvDevice.onItemClickListener =
-                AdapterView.OnItemClickListener { _, _, position, _ ->
-                    adapter.getItem(position)?.second?.let {
-                        connectDevice(it)
-                    }
-                }
         }
+
+        recyclerAdapter.submitList(deviceList)
 
         // 블루투스 기기 검색 및 상태변화 브로드캐스트
         bluetoothBroadcastReceiver = object : BroadcastReceiver() {
@@ -167,16 +154,26 @@ class MainActivity : AppCompatActivity() {
                 when (intent?.action) {
                     BluetoothDevice.ACTION_FOUND -> {
                         // BluetoothDevice 객체 획득
-                        val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                        val device =
+                            intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                         // 기기 이름
                         val deviceName = device?.name
                         // 기기 주소
                         val deviceHardwareAddress = device?.address
                         // 이름과 주소가 null이 아닌 경우
                         if (deviceName != null && deviceHardwareAddress != null) {
-                            adapter.add(Pair(deviceName, deviceHardwareAddress))
+                            val indexQuery =
+                                deviceList.indexOfFirst { it.address == deviceHardwareAddress }
+                            if (indexQuery != -1) {
+                                deviceList[indexQuery] = device
+                                recyclerAdapter.notifyItemChanged(indexQuery)
+                            } else {
+                                deviceList.add(device)
+                                recyclerAdapter.notifyItemInserted(deviceList.size - 1)
+                            }
                         }
                     }
+
 
                     BluetoothAdapter.ACTION_STATE_CHANGED -> {
                         when (intent.getIntExtra(
@@ -226,7 +223,7 @@ class MainActivity : AppCompatActivity() {
     // 활성화 요청
     fun setActivate() {
         bluetoothAdapter?.let {
-            if(!isPermissionGranted) {
+            if (!isPermissionGranted) {
                 requestPermission()
             } else {
                 // 비활성화 상태라면
@@ -257,10 +254,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-<<<<<<< HEAD
-=======
-
->>>>>>> 21a792d9eadb10e6f0cbbc5d353d8e28e8b52ab7
         }
     }
 
@@ -272,15 +265,15 @@ class MainActivity : AppCompatActivity() {
             } else {
                 // 블루투스 활성화 상태라면
                 if (it.isEnabled) {
-                    // ArrayAdapter clear
-                    adapter.clear()
+                    deviceList.clear()
+                    recyclerAdapter.notifyDataSetChanged()
                     // 페어링된 기기 확인
                     val pairedDevices: Set<BluetoothDevice> = it.bondedDevices
                     // 페어링된 기기가 존재하는 경우
                     if (pairedDevices.isNotEmpty()) {
                         pairedDevices.forEach { device ->
                             // ArrayAdapter에 아이템 추가
-                            adapter.add(Pair(device.name, device.address))
+                            deviceList.add(device)
                         }
                     } else {
                         showMessage(this, "페어링된 기기가 없습니다.")
@@ -308,8 +301,8 @@ class MainActivity : AppCompatActivity() {
                         return
                     }
 
-                    // ArrayAdapter clear
-                    adapter.clear()
+                    deviceList.clear()
+                    recyclerAdapter.notifyDataSetChanged()
                     // 검색시작
                     it.startDiscovery()
                     showMessage(this, "기기 검색을 시작하였습니다")
@@ -320,41 +313,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 디바이스에 연결
-    private fun connectDevice(deviceAddress: String) {
-        bluetoothAdapter?.let { adapter ->
-            if(!isPermissionGranted) {
-                requestPermission()
-            } else {
-                // 기기 검색을 수행중이라면 취소
-                if (adapter.isDiscovering) {
-                    adapter.cancelDiscovery()
-                }
+//    // 디바이스에 연결
+//    private fun connectDevice(deviceAddress: String) {
+//        bluetoothAdapter?.let { adapter ->
+//            if (!isPermissionGranted) {
+//                requestPermission()
+//            } else {
+//                // 기기 검색을 수행중이라면 취소
+//                if (adapter.isDiscovering) {
+//                    adapter.cancelDiscovery()
+//                }
+//
+//                // 서버의 역할을 수행 할 Device 획득
+//                val device = adapter.getRemoteDevice(deviceAddress)
+//                // UUID 선언
+//                val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+//                try {
+//                    val thread = ConnectThread(uuid, device)
+//
+//                    thread.run()
+//                    showMessage(this, "${device.name}과 연결되었습니다.")
+//                } catch (e: Exception) { // 연결에 실패할 경우 호출됨
+//                    showMessage(this, "기기의 전원이 꺼져 있습니다. 기기를 확인해주세요.")
+//                    return
+//                }
+//            }
+//        }
+//    }
 
-                // 서버의 역할을 수행 할 Device 획득
-                val device = adapter.getRemoteDevice(deviceAddress)
-                // UUID 선언
-                val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-                try {
-                    val thread = ConnectThread(uuid, device)
-
-                    thread.run()
-                    showMessage(this, "${device.name}과 연결되었습니다.")
-                } catch (e: Exception) { // 연결에 실패할 경우 호출됨
-                    showMessage(this, "기기의 전원이 꺼져 있습니다. 기기를 확인해주세요.")
-                    return
-                }
-            }
-        }
-    }
-
-<<<<<<< HEAD
     private fun getIntentFilter() = IntentFilter().apply {
         addAction(BluetoothDevice.ACTION_FOUND)
         addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-=======
-        // BroadcastReceiver 등록 해제
-        unregisterReceiver(bluetoothBroadcastReceiver)
->>>>>>> 21a792d9eadb10e6f0cbbc5d353d8e28e8b52ab7
     }
 }

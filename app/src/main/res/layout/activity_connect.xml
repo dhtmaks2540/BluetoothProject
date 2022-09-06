@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
@@ -7,12 +6,8 @@
     <data>
 
         <variable
-            name="adapter"
-            type="com.example.bleapp.CharacteristicAdapter" />
-
-        <variable
-            name="handler"
-            type="com.example.bleapp.ConnectActivity" />
+            name="viewModel"
+            type="com.example.bluetoothproject.ConnectViewModel" />
     </data>
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -86,30 +81,28 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
-            android:onClick="@{() -> handler.disConnect()}"
             android:text="연결"
             app:layout_constraintTop_toBottomOf="@id/label_state" />
 
         <TextView
-            android:id="@+id/tv_characteristic"
+            android:id="@+id/label_mode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="특성"
-            android:textSize="10sp"
-            android:textStyle="bold"
+            android:text="현재 모드: "
+            android:textSize="25sp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/btn_disconnect" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:adapter="@{adapter}"
-            android:id="@+id/rcv_characteristic_list"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="5dp"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/tv_characteristic"
-            tools:listitem="@layout/item_characteristic" />
+        <TextView
+            android:text='@{viewModel.mode == 0 ? "대기모드" : viewModel.mode == 2 ? "충전중" : "활성화"}'
+            tools:text="충전중.."
+            android:id="@+id/tv_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="25sp"
+            app:layout_constraintStart_toEndOf="@id/label_mode"
+            app:layout_constraintTop_toTopOf="@id/label_mode" />
+
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

@@ -95,14 +95,7 @@ class BluetoothLeService : Service() {
                         setLog(TAG, "Service ${service.uuid}\nCharacteristics:\n$characteristicsTable")
                     }
 
-                    val notifiableUUID = UUID.fromString("581f3b86-6e63-48cc-a618-288167d2c4a3")
-                    val notifiableCharacteristic = bluetoothGatt?.getService(UNKNOWN_SERVICE_1)?.getCharacteristic(notifiableUUID)
-                    if(notifiableCharacteristic?.isNotifiable() == true) {
-                        setLog(TAG, "isNotifiable")
-                    } else {
-                        setLog(TAG, "NO!!!")
-                    }
-                    enableNotifications(notifiableCharacteristic)
+//                    enableNotifications(notifiableCharacteristic)
                     setLog(TAG, "ACTION_GATT_SERVICES_DISCOVERED")
                 }
                 else -> {
@@ -221,26 +214,20 @@ class BluetoothLeService : Service() {
         }
     }
 
-//    @SuppressLint("MissingPermission")
-//    fun readCharacteristic(characteristic: BluetoothGattCharacteristic) {
-//        bluetoothGatt?.readCharacteristic(characteristic) ?: run {
-//            setLog(TAG, "BluetoothAdapter가 초기화되지 않았습니다.")
-//            return
-//        }
-//    }
-
     @SuppressLint("MissingPermission")
-    private fun readData() {
-        val genericAttributeCharUUID = UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb")
-        val genericAttributeChar = bluetoothGatt?.getService(GENERIC_ATTRIBUTES)?.getCharacteristic(genericAttributeCharUUID)
-        val genericAttributeCharUUID2 = UUID.fromString("00002a01-0000-1000-8000-00805f9b34fb")
-        val genericAttributeChar2 = bluetoothGatt?.getService(GENERIC_ATTRIBUTES)?.getCharacteristic(genericAttributeCharUUID2)
+    fun readData(characteristic: BluetoothGattCharacteristic) {
+        bluetoothGatt?.let {
+            val serviceUUID = characteristic.service.uuid
+            val characterChar = it.getService(serviceUUID).getCharacteristic(characteristic.uuid)
 
-        if(genericAttributeChar?.isReadable() == true) {
-            setLog(TAG,"READABLE")
-            bluetoothGatt?.readCharacteristic(genericAttributeChar2)
-        } else {
-            setLog(TAG, "NOT READABLE")
+            if(characterChar.isReadable()) {
+                setLog(TAG,"READABLE")
+                it.readCharacteristic(characterChar)
+            } else {
+                setLog(TAG, "NOT READABLE")
+            }
+        } ?: run {
+            setLog(TAG, "BluetoothAdapter가 초기화되지 않았습니다.")
         }
     }
 

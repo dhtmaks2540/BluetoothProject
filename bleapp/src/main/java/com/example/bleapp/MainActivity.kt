@@ -20,6 +20,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.databinding.DataBindingUtil
+import androidx.recyclerview.widget.SimpleItemAnimator
 import com.example.bleapp.databinding.ActivityMainBinding
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -33,9 +34,10 @@ class MainActivity : AppCompatActivity() {
         const val DEVICE_ADDRESS = "address"
     }
 
+    // 스캔에 필요한 변수
     private var isScanning = false
     private val scanResult = mutableListOf<ScanResult>()
-    private val scanResultAdapter: ScanResultAdapter by lazy {
+    private val recyclerAdapter: ScanResultAdapter by lazy {
         if(isScanning) {
             stopBleScan()
         }
@@ -81,8 +83,6 @@ class MainActivity : AppCompatActivity() {
         bluetoothAdapter?.bluetoothLeScanner
     }
 
-    private lateinit var handler: Handler
-
     // 스캔에 대한 결과를 Callback 해주는 객체
     private val leScanCallback: ScanCallback = object : ScanCallback() {
         // 스캔 성공 - > 결과
@@ -93,13 +93,13 @@ class MainActivity : AppCompatActivity() {
             if (result.device.name != null && result.device.address != null) {
                 if (indexQuery != -1) {
                     scanResult[indexQuery] = result
-                    scanResultAdapter.notifyItemChanged(indexQuery)
+                    recyclerAdapter.notifyItemChanged(indexQuery)
                 } else {
                     with(result.device) {
                         setLog(TAG, "Found BLE device! Name : ${name ?: "Unnamed"}, address : $address")
                     }
                     scanResult.add(result)
-                    scanResultAdapter.notifyItemInserted(scanResult.size - 1)
+                    recyclerAdapter.notifyItemInserted(scanResult.size - 1)
                 }
             }
         }
@@ -111,6 +111,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 블루투스 활성화 결과
     private val activityResultLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
@@ -139,6 +140,7 @@ class MainActivity : AppCompatActivity() {
         init()
     }
 
+    // 권한 확인 결과
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -160,6 +162,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
+        // 블루투스 비활성화라면 활성화 요청
         bluetoothAdapter?.let {
             if (!it.isEnabled) setActivate()
         }
@@ -169,7 +172,7 @@ class MainActivity : AppCompatActivity() {
     private fun init() {
         binding.apply {
             handler = this@MainActivity
-            adapter = scanResultAdapter
+            adapter = recyclerAdapter
 
             btnSearch.setOnClickListener {
                 if(isScanning) {
@@ -180,9 +183,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        scanResultAdapter.submitList(scanResult)
+        // Adapter 설정 및 애니메이션 제거
+        recyclerAdapter.submitList(scanResult)
+        val animator = binding.rcvBleDevice.itemAnimator
+        (animator as SimpleItemAnimator).supportsChangeAnimations = false
+
         setBluetooth()
-        handler = Handler(Looper.getMainLooper())
     }
 
     // 초기 권한 확인
@@ -208,7 +214,9 @@ class MainActivity : AppCompatActivity() {
                 Manifest.permission.ACCESS_FINE_LOCATION
             )
 
-            requestPermissions(permissions, BLUETOOTH_PERMISSION)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(permissions, BLUETOOTH_PERMISSION)
+            }
         }
     }
 
@@ -267,8 +275,11 @@ class MainActivity : AppCompatActivity() {
             // 스캔하지 않고 있다면
             if (!isScanning) {
                 scanResult.clear()
+                recyclerAdapter.notifyDataSetChanged()
                 bluetoothLeScanner?.startScan(null, scanSettings, leScanCallback)
+
                 isScanning = true
+                bluetoothLeScanner?.startScan(leScanCallback)
             }
         }
     }

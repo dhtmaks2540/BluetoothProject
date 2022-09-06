@@ -1,39 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
     <data>
+
         <variable
             name="item"
-            type="android.bluetooth.BluetoothGattCharacteristic" />
+            type="android.bluetooth.BluetoothDevice" />
     </data>
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layout_root"
         android:layout_width="match_parent"
-        android:layout_height="70dp">
+        android:layout_height="wrap_content"
+        android:padding="8dp">
 
         <TextView
-            android:id="@+id/tv_uuid"
+            android:id="@+id/tv_device_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@{item.uuid.toString()}"
-            android:textSize="14sp"
+            android:text="@{item.name}"
+            android:textSize="15sp"
             android:textStyle="bold"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            tools:text="00000000-0000-0000-0000-000000000000" />
+            tools:text="기기 이름" />
 
         <TextView
-            android:id="@+id/tv_state"
+            android:id="@+id/tv_device_address"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
-            app:layout_constraintStart_toStartOf="@id/tv_uuid"
-            app:layout_constraintTop_toBottomOf="@id/tv_uuid"
-            tools:text="READABLE" />
+            android:text="@{item.address}"
+            android:textSize="15sp"
+            app:layout_constraintStart_toStartOf="@id/tv_device_name"
+            app:layout_constraintTop_toBottomOf="@id/tv_device_name"
+            tools:text="xxx:xxx:xxx" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
 </layout>

@@ -1,12 +1,14 @@
 package com.example.bleapp
 
+import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
 import android.content.*
 import android.os.Bundle
 import android.os.IBinder
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
-import com.example.bleapp.ble.printProperties
+import com.example.bleapp.ble.*
 import com.example.bleapp.databinding.ActivityConnectBinding
 
 class ConnectActivity : AppCompatActivity() {
@@ -14,7 +16,9 @@ class ConnectActivity : AppCompatActivity() {
         private const val TAG = "CONNECT_ACTIVITY"
     }
 
-    private lateinit var binding: ActivityConnectBinding
+    private val binding: ActivityConnectBinding by lazy {
+        DataBindingUtil.setContentView(this, R.layout.activity_connect)
+    }
     private var deviceAddress: String? = null
     private var deviceName: String? = null
     private var bluetoothLeService: BluetoothLeService? = null
@@ -31,6 +35,45 @@ class ConnectActivity : AppCompatActivity() {
                 }
             }
         }
+    private val characteristicList = mutableListOf<BluetoothGattCharacteristic>()
+    private val recyclerAdapter: CharacteristicAdapter by lazy {
+        CharacteristicAdapter(
+            characteristicOnClicked = { characteristic ->
+                val stateArray = arrayListOf<String>()
+                if (characteristic.isReadable()) stateArray.add("Read")
+                if (characteristic.isWritable()) stateArray.add("Write")
+                if (characteristic.isIndicatable()) stateArray.add("Toggle Indications")
+                if (characteristic.isNotifiable()) stateArray.add("Toggle Notifications")
+                if (characteristic.isWritableWithoutResponse()) stateArray.add("Write Without Response")
+                val builder = AlertDialog.Builder(this)
+                    .setTitle("실행할 액션을 선택해주세요.")
+                    .setItems(
+                        stateArray.toTypedArray()
+                    ) { _, pos ->
+                        when (stateArray[pos]) {
+                            "Read" -> bluetoothLeService?.readData(characteristic)
+                            "Write" -> bluetoothLeService?.writeCharacteristic(
+                                characteristic,
+                                ByteArray(3)
+                            )
+                            "Toggle Indications" -> bluetoothLeService?.enableNotifications(
+                                characteristic
+                            )
+                            "Toggle Notifications" -> bluetoothLeService?.enableNotifications(
+                                characteristic
+                            )
+                            "Write Without Response" -> bluetoothLeService?.writeCharacteristic(
+                                characteristic,
+                                ByteArray(3)
+                            )
+                        }
+                    }
+
+                val alterDialog = builder.create()
+                alterDialog.show()
+            }
+        )
+    }
 
     // 서비스 바인딩 상태에 따라서 호출되는 콜백 메서드를 가지는 객체
     private val serviceConnection = object : ServiceConnection {
@@ -69,13 +112,18 @@ class ConnectActivity : AppCompatActivity() {
                 BluetoothLeService.ACTION_GATT_DISCONNECTED -> {
                     connected = false
                     setLog(TAG, "ACTION_GATT_DISCONNECTED")
+                    showMessage(this@ConnectActivity, "기기와의 연결이 끊겼습니다. 기기를 확인해주세요.")
                 }
                 BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED -> {
                     setLog(TAG, "ACTION_GATT_SERVICES_DISCOVERED")
                     val services = bluetoothLeService?.getSupportedGattServices()
-//                    if (services != null && services.isNotEmpty()) {
-//                        displayGattServices(services)
-//                    }
+                    services?.forEach { service ->
+                        val characteristics = service.characteristics
+                        characteristics?.forEach { characteristic ->
+                            characteristicList.add(characteristic)
+                            recyclerAdapter.notifyItemChanged(characteristicList.size - 1)
+                        }
+                    }
                 }
                 BluetoothLeService.ACTION_DATA_AVAILABLE -> {
                     val rate: Int = intent.getIntExtra("DATA", 0)
@@ -88,7 +136,6 @@ class ConnectActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = DataBindingUtil.setContentView(this, R.layout.activity_connect)
         init()
     }
 
@@ -119,12 +166,16 @@ class ConnectActivity : AppCompatActivity() {
 
         binding.apply {
             handler = this@ConnectActivity
+            adapter = recyclerAdapter
             tvName.text = deviceName
             tvAddress.text = deviceAddress
         }
 
-        val gattServerIntent = Intent(this, BluetoothLeService::class.java)
+        // Adapter 초기화
+        recyclerAdapter.submitList(characteristicList)
+
         // 서비스 bind
+        val gattServerIntent = Intent(this, BluetoothLeService::class.java)
         bindService(gattServerIntent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 

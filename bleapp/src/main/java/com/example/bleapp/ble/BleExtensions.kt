@@ -3,6 +3,11 @@ package com.example.bleapp.ble
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 
+fun ByteArray.toHexString(): String =
+    joinToString(separator = " ", prefix = "0x") { String.format("%02X", it) }
+
+// BluetoothGattCharacteristic
+
 fun BluetoothGattCharacteristic.containsProperty(property: Int): Boolean {
     return properties and property != 0
 }
@@ -31,6 +36,8 @@ fun BluetoothGattCharacteristic.printProperties(): String = mutableListOf<String
     if(isEmpty()) add("EMPTY")
 }.joinToString()
 
+// BluetoothGattDescriptor
+
 fun BluetoothGattDescriptor.isReadable(): Boolean =
     containsPermission(BluetoothGattDescriptor.PERMISSION_READ) ||
             containsPermission(BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED) ||
@@ -51,6 +58,3 @@ fun BluetoothGattDescriptor.printProperties(): String = mutableListOf<String>().
     if(isWritable()) add("WRITABLE")
     if(isEmpty()) add("EMPTY")
 }.joinToString()
-
-fun ByteArray.toHexString(): String =
-    joinToString(separator = " ", prefix = "0x") { String.format("%02X", it) }
