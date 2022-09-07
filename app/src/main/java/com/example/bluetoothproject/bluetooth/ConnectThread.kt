@@ -1,11 +1,11 @@
-package com.example.bluetoothproject
+package com.example.bluetoothproject.bluetooth
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
+import com.example.bluetoothproject.ConnectViewModel
+import com.example.bluetoothproject.useTimber
+import java.io.*
 import java.util.*
 
 @SuppressLint("MissingPermission")
@@ -39,8 +39,9 @@ class ConnectThread(
                 connectedThread?.start()
             }
         } catch (e: IOException) { // 기기와의 연결이 실패할 경우 호출
-            connectSocket?.close()
-            useTimber(e.message.toString())
+            cancel()
+            connectViewModel.setConnected(false)
+//            useTimber("Connect Thread Exception")
         }
     }
 
@@ -62,37 +63,39 @@ class ConnectThread(
                 inputStream = bluetoothSocket?.inputStream!!
                 outputStream = bluetoothSocket.outputStream!!
             } catch (e: IOException) {
-                setLog(TAG, e.message.toString())
+                useTimber(e.message.toString())
             }
         }
 
         @OptIn(ExperimentalUnsignedTypes::class)
         override fun run() {
-            var buffer = ByteArray(1024)
-            var bytes: Int = 0
+            connectViewModel.setConnected(true)
 
             while (true) {
                 try {
-                    // 데이터 받기(읽기)
-                    bytes = inputStream.available()
-                    if (bytes != 0) {
-                        buffer = ByteArray(bytes)
-                        bytes = inputStream.available()
-                        bytes = inputStream.read(buffer, 0, bytes)
-                        val uBuffer = buffer.toUByteArray()
-                        if(uBuffer.first().toInt() != 255 || uBuffer.first().toInt() == 254) {
-                            continue
-                        } else {
-//                            connectViewModel.setDataArray(uBuffer)
-                            val sb = StringBuilder()
-                            uBuffer.forEach { byte ->
-                                sb.append("$byte ")
-                            }
-                            useTimber(sb.toString())
+                    val byteArr = ByteArray(20)
+                    val readByteCnt = inputStream.read(byteArr)
+                    val uBuffer = byteArr.toUByteArray()
+                    if (uBuffer[0].toInt() != 255 || uBuffer[1].toInt() != 254) {
+                        continue
+                    } else {
+                        val sb = StringBuilder()
+                        uBuffer.forEach { byte ->
+                            sb.append("$byte ")
                         }
+                        val data = sb.toString().trim()
+
+                        val ch1 = getBit(uBuffer[7].toInt(), 5)
+                        val ch2 = getBit(uBuffer[7].toInt(), 4)
+                        val ref = getBit(uBuffer[7].toInt(), 3)
+                        useTimber(data)
+                        useTimber(" 왼쪽이마: ${if(ch1 == 0) "미부착" else "부착"}, 오른쪽이마: ${if(ch2 == 0) "미부착" else "부착"}, 귓볼: ${if(ref == 0) "미부착" else "부착"}")
+                        connectViewModel.setDataString(data)
                     }
                 } catch (e: Exception) { // 기기와의 연결이 끊기면 호출
-                    useTimber(e.message.toString())
+                    useTimber("Connected Thread Exception")
+                    connectViewModel.setConnected(false)
+                    cancel()
                     break
                 }
             }
@@ -101,7 +104,7 @@ class ConnectThread(
         fun write(bytes: ByteArray) {
             try {
                 // 데이터 전송
-                outputStream?.write(bytes)
+                outputStream.write(bytes)
             } catch (e: IOException) {
                 useTimber(e.message.toString())
             }

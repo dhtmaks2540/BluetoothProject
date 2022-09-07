@@ -21,6 +21,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
+import com.example.bluetoothproject.bluetooth.BLUETOOTH_CONNECT
+import com.example.bluetoothproject.bluetooth.BLUETOOTH_PERMISSION
+import com.example.bluetoothproject.bluetooth.BLUETOOTH_SCAN
 import com.example.bluetoothproject.databinding.ActivityMainBinding
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.*
@@ -161,7 +164,7 @@ class MainActivity : AppCompatActivity() {
                         // 기기 주소
                         val deviceHardwareAddress = device?.address
                         // 이름과 주소가 null이 아닌 경우
-                        if (deviceName != null && deviceHardwareAddress != null) {
+                        if (deviceName != null && deviceName == "neuroNicle FX2" && deviceHardwareAddress != null) {
                             val indexQuery =
                                 deviceList.indexOfFirst { it.address == deviceHardwareAddress }
                             if (indexQuery != -1) {

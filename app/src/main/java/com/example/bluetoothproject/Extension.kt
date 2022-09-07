@@ -11,10 +11,6 @@ fun showMessage(context: Context, message: String) {
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 }
 
-fun setLog(tag: String, message: String?) {
-    Log.d(tag, message ?: "No Data")
-}
-
 fun useTimber(message: String) {
     Timber.d(message)
 }
@@ -25,10 +21,5 @@ fun Context.hasPermission(permissionTypes: Array<String>): Boolean {
     }
 }
 
-fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
-
 const val DEVICE_ADDRESS = "deviceAddress"
 const val DEVICE_NAME = "deviceName"
-const val BLUETOOTH_CONNECT = 1
-const val BLUETOOTH_SCAN = 2
-const val BLUETOOTH_PERMISSION = 100

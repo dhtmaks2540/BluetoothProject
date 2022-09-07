@@ -11,6 +11,9 @@ import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
+import com.example.bluetoothproject.bluetooth.BLUETOOTH_CONNECT
+import com.example.bluetoothproject.bluetooth.BLUETOOTH_PERMISSION
+import com.example.bluetoothproject.bluetooth.ConnectThread
 import com.example.bluetoothproject.databinding.ActivityConnectBinding
 import timber.log.Timber
 import java.util.*
@@ -31,22 +34,6 @@ class ConnectActivity : AppCompatActivity() {
 
     private var deviceAddress: String? = null
     private var deviceName: String? = null
-    private var isConnected = false
-        set(value) {
-            field = value
-            if (field) {
-                binding.apply {
-                    tvState.text = "연결"
-                    btnDisconnect.text = "연결 해제"
-                }
-            } else {
-                binding.apply {
-                    tvState.text = "미연결"
-                    btnDisconnect.text = "연결"
-                }
-
-            }
-        }
 
     // 권한 확인
     private val isPermissionGranted
@@ -91,11 +78,17 @@ class ConnectActivity : AppCompatActivity() {
         binding.apply {
             viewModel = connectViewModel
             lifecycleOwner = this@ConnectActivity
+
             btnDisconnect.setOnClickListener {
                 deviceAddress?.let { address ->
                     connectDevice(address)
                 }
             }
+
+            btnMeasure.setOnClickListener {
+                startMeasure()
+            }
+
             tvName.text = deviceName
             tvAddress.text = deviceAddress
         }
@@ -115,6 +108,11 @@ class ConnectActivity : AppCompatActivity() {
             if (!isPermissionGranted) {
                 requestPermission()
             } else {
+                if(!adapter.isEnabled) {
+                    showMessage(this, "블루투스가 비활성화되어 있습니다.")
+                    return
+                }
+
                 // 기기 검색을 수행중이라면 취소
                 if (adapter.isDiscovering) {
                     adapter.cancelDiscovery()
@@ -131,16 +129,31 @@ class ConnectActivity : AppCompatActivity() {
                      * run은 스레드의 override된 메서드만 호출하는 것
                      * start는 해당 쓰레드를 new에서, run이 가능한 상태로 만들어 준다.
                      */
+
                     thread.start()
-                    isConnected = true
-                    showMessage(this, "${device.name}과 연결되었습니다.")
+
+                    showMessage(this, "연결 시도")
                 } catch (e: Exception) { // 연결에 실패할 경우 호출됨
-                    isConnected = false
-                    showMessage(this, e.message.toString())
-                    return
+                    useTimber("Connect Exception")
                 }
             }
         }
+    }
+
+    private fun startMeasure() {
+        if(bluetoothAdapter?.isEnabled == false) {
+            showMessage(this, "블루투스가 비활성화되어 있습니다.")
+            return
+        }
+        if(connectViewModel.isConnected.value == false) {
+            showMessage(this, "연결이 되지않아 측정이 불가합니다.")
+            return
+        }
+        if(connectViewModel.dataList.value?.get(2) != 1) {
+            showMessage(this, "헤드셋이 이마에 밀착되지 않았거나 오른쪽 귓볼에 센서가 착용되지 않았습니다.")
+        }
+
+
     }
 
     // 권한요청

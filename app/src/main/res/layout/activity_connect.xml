@@ -15,7 +15,7 @@
         android:layout_height="match_parent"
         android:padding="8dp">
 
-        <TextView
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/label_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -26,7 +26,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <TextView
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_name"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -36,7 +36,7 @@
             app:layout_constraintStart_toEndOf="@id/label_name"
             app:layout_constraintTop_toTopOf="@id/label_name" />
 
-        <TextView
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/label_address"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -46,7 +46,7 @@
             app:layout_constraintStart_toStartOf="@id/label_name"
             app:layout_constraintTop_toBottomOf="@id/label_name" />
 
-        <TextView
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_address"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -56,7 +56,7 @@
             app:layout_constraintStart_toEndOf="@id/label_address"
             app:layout_constraintTop_toTopOf="@id/label_address" />
 
-        <TextView
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/label_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -66,11 +66,12 @@
             app:layout_constraintStart_toStartOf="@id/label_address"
             app:layout_constraintTop_toBottomOf="@id/label_address" />
 
-        <TextView
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_state"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
+            android:text='@{viewModel.isConnected() ? "연결됨" : "연결안됨"}'
             android:textSize="25sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/label_state"
@@ -78,13 +79,27 @@
 
         <Button
             android:id="@+id/btn_disconnect"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
-            android:text="연결"
-            app:layout_constraintTop_toBottomOf="@id/label_state" />
+            android:layout_marginEnd="5dp"
+            android:text='@{viewModel.isConnected() ? "연결해제" : "연결"}'
+            app:layout_constraintEnd_toStartOf="@id/btn_measure"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_state"
+            tools:text="연결 안됨" />
 
-        <TextView
+        <Button
+            android:id="@+id/btn_measure"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:text="측정"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/btn_disconnect"
+            app:layout_constraintTop_toTopOf="@id/btn_disconnect" />
+
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/label_mode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -93,15 +108,35 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/btn_disconnect" />
 
-        <TextView
-            android:text='@{viewModel.mode == 0 ? "대기모드" : viewModel.mode == 2 ? "충전중" : "활성화"}'
-            tools:text="충전중.."
+        <androidx.appcompat.widget.AppCompatTextView
             android:id="@+id/tv_mode"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
             android:textSize="25sp"
             app:layout_constraintStart_toEndOf="@id/label_mode"
-            app:layout_constraintTop_toTopOf="@id/label_mode" />
+            app:layout_constraintTop_toTopOf="@id/label_mode"
+            app:mode="@{viewModel.dataList[2]}"
+            tools:text="연결안됨.." />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_battery"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="배터리 상태: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_mode" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_battery"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:layout_constraintStart_toEndOf="@id/label_battery"
+            app:layout_constraintTop_toTopOf="@id/label_battery"
+            tools:text="충전중.." />
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

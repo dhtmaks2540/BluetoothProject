@@ -21,7 +21,7 @@ class AcceptThread(private val bluetoothAdapter: BluetoothAdapter): Thread() {
             // 서버 소켓
             serverSocket = bluetoothAdapter.listenUsingRfcommWithServiceRecord(SOCKET_NAME, MY_UUID)
         } catch(e: Exception) {
-            setLog(TAG, e.message.toString())
+            useTimber(e.message.toString())
         }
     }
 
@@ -32,7 +32,7 @@ class AcceptThread(private val bluetoothAdapter: BluetoothAdapter): Thread() {
                 // 클라이언트 소켓
                 socket = serverSocket.accept()
             } catch (e: IOException) {
-                setLog(TAG, e.message.toString())
+                useTimber(e.message.toString())
             }
 
             socket?.let {
@@ -49,7 +49,7 @@ class AcceptThread(private val bluetoothAdapter: BluetoothAdapter): Thread() {
         try {
             serverSocket.close()
         } catch (e: IOException) {
-            setLog(TAG, e.message.toString())
+            useTimber(e.message.toString())
         }
     }
 }

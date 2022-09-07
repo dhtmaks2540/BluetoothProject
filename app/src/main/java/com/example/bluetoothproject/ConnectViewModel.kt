@@ -4,18 +4,19 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 
-@OptIn(ExperimentalUnsignedTypes::class)
 class ConnectViewModel: ViewModel() {
-    private val _dataArray = MutableLiveData<UByteArray>()
-    val dataArray: LiveData<UByteArray> = _dataArray
+    private val _dataList = MutableLiveData<List<Int>>()
+    val dataList: LiveData<List<Int>> = _dataList
 
-    val mode: LiveData<Int?> by lazy {
-        MutableLiveData(_dataArray.value?.get(2)?.toInt())
+    private val _isConnected = MutableLiveData<Boolean>()
+    val isConnected: LiveData<Boolean> = _isConnected
+
+    fun setDataString(data: String) {
+        val list = data.split(" ").map { it.toInt() }
+        _dataList.postValue(list)
     }
 
-    fun setDataArray(uByteArray: UByteArray) {
-        _dataArray.postValue(uByteArray)
+    fun setConnected(flag: Boolean) {
+        _isConnected.postValue(flag)
     }
-
-    fun getDataArray() = _dataArray
 }
