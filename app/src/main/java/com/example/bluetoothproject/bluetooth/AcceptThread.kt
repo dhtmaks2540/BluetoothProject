@@ -1,8 +1,9 @@
-package com.example.bluetoothproject
+package com.example.bluetoothproject.bluetooth
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
+import com.example.bluetoothproject.useTimber
 import java.io.IOException
 import java.util.*
 

@@ -5,6 +5,10 @@ import java.io.InputStreamReader
 import java.util.*
 import kotlin.math.min
 
+/**
+ * https://www.acmicpc.net/board/view/27386
+ */
+
 fun main() = with(BufferedReader(InputStreamReader(System.`in`))) {
     val st = StringTokenizer(readLine(), " ")
     val n = st.nextToken().toInt()
@@ -15,7 +19,7 @@ fun main() = with(BufferedReader(InputStreamReader(System.`in`))) {
     repeat(n) { row ->
         val str = readLine()
         repeat(m) { col ->
-            graph[row][col] = str[col].digitToInt()
+            graph[row][col] = Character.getNumericValue(str[col])
         }
     }
 

@@ -8,32 +8,33 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
-import androidx.databinding.DataBindingUtil
-import com.example.bluetoothproject.bluetooth.BLUETOOTH_CONNECT
-import com.example.bluetoothproject.bluetooth.BLUETOOTH_PERMISSION
-import com.example.bluetoothproject.bluetooth.ConnectThread
+import com.example.bluetoothproject.base.BaseActivity
+import com.example.bluetoothproject.bluetooth.*
+import com.example.bluetoothproject.bluetooth.model.StreamChargeMode
+import com.example.bluetoothproject.bluetooth.model.StreamWaitingMode
 import com.example.bluetoothproject.databinding.ActivityConnectBinding
+import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 import java.util.*
+import javax.inject.Inject
 
-class ConnectActivity : AppCompatActivity() {
-    companion object {
-        private const val TAG = "CONNECT_ACTIVITY"
-    }
+@AndroidEntryPoint
+class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBinding, ConnectViewModel>(R.layout.activity_connect) {
+    @Inject
+    lateinit var connectedHandler: ConnectedHandler
+    private lateinit var connectThread: ConnectThread
 
-    private val binding: ActivityConnectBinding by lazy {
-        DataBindingUtil.setContentView(this, R.layout.activity_connect)
-    }
+    @Inject
+    lateinit var bluetoothMode: BluetoothMode
+
+    override val viewModel: ConnectViewModel by viewModels()
+
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
-    private val connectViewModel: ConnectViewModel by viewModels()
-
-    private var deviceAddress: String? = null
-    private var deviceName: String? = null
 
     // 권한 확인
     private val isPermissionGranted
@@ -72,15 +73,11 @@ class ConnectActivity : AppCompatActivity() {
     }
 
     private fun init() {
-        deviceAddress = intent.getStringExtra(DEVICE_ADDRESS)
-        deviceName = intent.getStringExtra(DEVICE_NAME)
-
         binding.apply {
-            viewModel = connectViewModel
-            lifecycleOwner = this@ConnectActivity
+            vm = viewModel
 
             btnDisconnect.setOnClickListener {
-                deviceAddress?.let { address ->
+                viewModel.deviceAddress.value?.let { address ->
                     connectDevice(address)
                 }
             }
@@ -88,10 +85,27 @@ class ConnectActivity : AppCompatActivity() {
             btnMeasure.setOnClickListener {
                 startMeasure()
             }
-
-            tvName.text = deviceName
-            tvAddress.text = deviceAddress
         }
+
+        connectedHandler.setListener(object : HandlerMessageListener {
+            override fun getFlagMessage(flag: Boolean) {
+                viewModel.setConnected(flag)
+            }
+
+            override fun getModeData(modeData: Any) {
+                useTimber("Mode : $bluetoothMode")
+                when(bluetoothMode) {
+                    BluetoothMode.WAITING_MODE -> {
+                        val data = modeData as StreamWaitingMode
+                        useTimber("Wait - ${data.remainTime}")
+                    }
+                    BluetoothMode.CHARGE_MODE -> {
+                        val data = modeData as StreamChargeMode
+                        useTimber("Charge - ${data.packetCount}")
+                    }
+                }
+            }
+        })
 
         setUpTimber()
     }
@@ -108,7 +122,7 @@ class ConnectActivity : AppCompatActivity() {
             if (!isPermissionGranted) {
                 requestPermission()
             } else {
-                if(!adapter.isEnabled) {
+                if (!adapter.isEnabled) {
                     showMessage(this, "블루투스가 비활성화되어 있습니다.")
                     return
                 }
@@ -123,14 +137,13 @@ class ConnectActivity : AppCompatActivity() {
                 // UUID 선언
                 val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
                 try {
-                    val thread = ConnectThread(uuid, device, connectViewModel)
+                    connectThread = ConnectThread(uuid, device, connectedHandler)
 
                     /**
                      * run은 스레드의 override된 메서드만 호출하는 것
                      * start는 해당 쓰레드를 new에서, run이 가능한 상태로 만들어 준다.
                      */
-
-                    thread.start()
+                    connectThread.start()
 
                     showMessage(this, "연결 시도")
                 } catch (e: Exception) { // 연결에 실패할 경우 호출됨
@@ -141,19 +154,17 @@ class ConnectActivity : AppCompatActivity() {
     }
 
     private fun startMeasure() {
-        if(bluetoothAdapter?.isEnabled == false) {
+        if (bluetoothAdapter?.isEnabled == false) {
             showMessage(this, "블루투스가 비활성화되어 있습니다.")
             return
         }
-        if(connectViewModel.isConnected.value == false) {
+        if (viewModel.isConnected.value == false) {
             showMessage(this, "연결이 되지않아 측정이 불가합니다.")
             return
         }
-        if(connectViewModel.dataList.value?.get(2) != 1) {
+        if (viewModel.dataList.value?.get(2) != 1) {
             showMessage(this, "헤드셋이 이마에 밀착되지 않았거나 오른쪽 귓볼에 센서가 착용되지 않았습니다.")
         }
-
-
     }
 
     // 권한요청

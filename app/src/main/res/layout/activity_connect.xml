@@ -6,7 +6,7 @@
     <data>
 
         <variable
-            name="viewModel"
+            name="vm"
             type="com.example.bluetoothproject.ConnectViewModel" />
     </data>
 
@@ -31,6 +31,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
+            android:text="@{vm.deviceName}"
             android:textSize="25sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/label_name"
@@ -51,6 +52,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
+            android:text="@{vm.deviceAddress}"
             android:textSize="25sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/label_address"
@@ -71,7 +73,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
-            android:text='@{viewModel.isConnected() ? "연결됨" : "연결안됨"}'
+            android:text='@{vm.isConnected() ? "연결됨" : "연결안됨"}'
             android:textSize="25sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toEndOf="@id/label_state"
@@ -83,7 +85,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="5dp"
             android:layout_marginEnd="5dp"
-            android:text='@{viewModel.isConnected() ? "연결해제" : "연결"}'
+            android:text='@{vm.isConnected() ? "연결해제" : "연결"}'
             app:layout_constraintEnd_toStartOf="@id/btn_measure"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/label_state"
@@ -116,7 +118,7 @@
             android:textSize="25sp"
             app:layout_constraintStart_toEndOf="@id/label_mode"
             app:layout_constraintTop_toTopOf="@id/label_mode"
-            app:mode="@{viewModel.dataList[2]}"
+            app:mode="@{vm.dataList[2]}"
             tools:text="연결안됨.." />
 
         <androidx.appcompat.widget.AppCompatTextView

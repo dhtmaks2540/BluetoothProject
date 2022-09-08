@@ -3,28 +3,33 @@ package com.example.bluetoothproject.bluetooth
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.os.Bundle
+import android.os.Message
 import com.example.bluetoothproject.ConnectViewModel
+import com.example.bluetoothproject.bluetooth.model.StreamChargeMode
+import com.example.bluetoothproject.bluetooth.model.StreamWaitingMode
 import com.example.bluetoothproject.useTimber
 import java.io.*
 import java.util.*
+import javax.inject.Inject
 
 @SuppressLint("MissingPermission")
 class ConnectThread(
     private val myUUID: UUID,
     private val device: BluetoothDevice,
-    private val connectViewModel: ConnectViewModel
+    val connectedHandler: ConnectedHandler
 ) : Thread() {
-    companion object {
-        private const val TAG = "CONNECT_THREAD"
-    }
+    @Inject
+    lateinit var nowMode: BluetoothMode
 
+    private lateinit var message: Message
+    private val bundle = Bundle()
     // BluetoothDevice 로부터 BluetoothSocket 획득
     private val connectSocket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
         device.createRfcommSocketToServiceRecord(myUUID)
     }
-
     private val connectedThread: ConnectedThread? by lazy {
-        ConnectedThread(connectSocket)
+        ConnectedThread()
     }
 
     override fun run() {
@@ -40,8 +45,14 @@ class ConnectThread(
             }
         } catch (e: IOException) { // 기기와의 연결이 실패할 경우 호출
             cancel()
-            connectViewModel.setConnected(false)
-//            useTimber("Connect Thread Exception")
+
+            bundle.putBoolean(CONNECT_FLAG, false)
+            message = connectedHandler.obtainMessage()
+            message.what = CONNECT_TYPE
+            message.data = bundle
+            connectedHandler.sendMessage(message)
+
+            useTimber("Connect Thread Exception")
         }
     }
 
@@ -53,49 +64,71 @@ class ConnectThread(
         }
     }
 
-    private inner class ConnectedThread(private val bluetoothSocket: BluetoothSocket?) : Thread() {
+    @OptIn(ExperimentalUnsignedTypes::class)
+    private inner class ConnectedThread: Thread() {
         private lateinit var inputStream: InputStream
         private lateinit var outputStream: OutputStream
 
         init {
             try {
                 // BluetoothSocket의 InputStream, OutputStream 초기화
-                inputStream = bluetoothSocket?.inputStream!!
-                outputStream = bluetoothSocket.outputStream!!
+                inputStream = connectSocket?.inputStream!!
+                outputStream = connectSocket?.outputStream!!
             } catch (e: IOException) {
                 useTimber(e.message.toString())
             }
         }
 
-        @OptIn(ExperimentalUnsignedTypes::class)
         override fun run() {
-            connectViewModel.setConnected(true)
+            bundle.putBoolean(CONNECT_FLAG, true)
+            message = connectedHandler.obtainMessage()
+            message.what = CONNECT_TYPE
+            message.data = bundle
+            connectedHandler.sendMessage(message)
 
             while (true) {
                 try {
                     val byteArr = ByteArray(20)
-                    val readByteCnt = inputStream.read(byteArr)
+                    inputStream.read(byteArr)
                     val uBuffer = byteArr.toUByteArray()
                     if (uBuffer[0].toInt() != 255 || uBuffer[1].toInt() != 254) {
                         continue
                     } else {
-                        val sb = StringBuilder()
-                        uBuffer.forEach { byte ->
-                            sb.append("$byte ")
-                        }
-                        val data = sb.toString().trim()
+                        message = connectedHandler.obtainMessage()
+                        // 모드 확인
+                        val modeValue = uBuffer[2].toInt()
+                        // 스트림
+                        if(modeValue in 0..15) {
+                            message.what = MODE_DATA
+                            when(modeValue) {
+                                // 대기
+                                0 -> {
+                                    nowMode = BluetoothMode.WAITING_MODE
+                                    val data = StreamWaitingMode(uBuffer)
+                                    message.obj = data
+                                }
+                                // 충전
+                                2 -> {
+                                    nowMode = BluetoothMode.CHARGE_MODE
+                                    val data = StreamChargeMode(uBuffer)
+                                    message.obj = data
+                                }
+                                // 활성화
+                                else -> {
 
-                        val ch1 = getBit(uBuffer[7].toInt(), 5)
-                        val ch2 = getBit(uBuffer[7].toInt(), 4)
-                        val ref = getBit(uBuffer[7].toInt(), 3)
-                        useTimber(data)
-                        useTimber(" 왼쪽이마: ${if(ch1 == 0) "미부착" else "부착"}, 오른쪽이마: ${if(ch2 == 0) "미부착" else "부착"}, 귓볼: ${if(ref == 0) "미부착" else "부착"}")
-                        connectViewModel.setDataString(data)
+                                }
+                            }
+                            connectedHandler.sendMessage(message)
+                        }
                     }
                 } catch (e: Exception) { // 기기와의 연결이 끊기면 호출
-                    useTimber("Connected Thread Exception")
-                    connectViewModel.setConnected(false)
+                    bundle.putBoolean(CONNECT_FLAG, false)
+                    message = connectedHandler.obtainMessage()
+                    message.what = CONNECT_TYPE
+                    message.data = bundle
+                    connectedHandler.sendMessage(message)
                     cancel()
+                    useTimber("Connected Thread Exception")
                     break
                 }
             }
@@ -112,7 +145,7 @@ class ConnectThread(
 
         fun cancel() {
             try {
-                bluetoothSocket?.close()
+                connectSocket?.close()
             } catch (e: IOException) {
                 useTimber(e.message.toString())
             }

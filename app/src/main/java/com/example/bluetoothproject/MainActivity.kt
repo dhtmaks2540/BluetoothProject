@@ -17,10 +17,12 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
+import com.example.bluetoothproject.base.BaseActivity
 import com.example.bluetoothproject.bluetooth.BLUETOOTH_CONNECT
 import com.example.bluetoothproject.bluetooth.BLUETOOTH_PERMISSION
 import com.example.bluetoothproject.bluetooth.BLUETOOTH_SCAN
@@ -30,11 +32,8 @@ import java.util.*
 
 @SuppressLint("MissingPermission")
 @AndroidEntryPoint
-class MainActivity : AppCompatActivity() {
-    companion object {
-        private const val TAG = "MAIN_ACTIVITY"
-    }
-
+class MainActivity() : BaseActivity<ActivityMainBinding, MainViewModel>(R.layout.activity_main) {
+    override val viewModel: MainViewModel by viewModels()
     // 권한 확인
     private val isPermissionGranted
         get() = hasPermission(
@@ -44,11 +43,6 @@ class MainActivity : AppCompatActivity() {
                 arrayOf()
             }
         )
-
-    // 데이터 바인딩
-    private val binding: ActivityMainBinding by lazy {
-        DataBindingUtil.setContentView(this, R.layout.activity_main)
-    }
 
     // 블루투스 어댑터
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
@@ -315,34 +309,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
-//    // 디바이스에 연결
-//    private fun connectDevice(deviceAddress: String) {
-//        bluetoothAdapter?.let { adapter ->
-//            if (!isPermissionGranted) {
-//                requestPermission()
-//            } else {
-//                // 기기 검색을 수행중이라면 취소
-//                if (adapter.isDiscovering) {
-//                    adapter.cancelDiscovery()
-//                }
-//
-//                // 서버의 역할을 수행 할 Device 획득
-//                val device = adapter.getRemoteDevice(deviceAddress)
-//                // UUID 선언
-//                val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
-//                try {
-//                    val thread = ConnectThread(uuid, device)
-//
-//                    thread.run()
-//                    showMessage(this, "${device.name}과 연결되었습니다.")
-//                } catch (e: Exception) { // 연결에 실패할 경우 호출됨
-//                    showMessage(this, "기기의 전원이 꺼져 있습니다. 기기를 확인해주세요.")
-//                    return
-//                }
-//            }
-//        }
-//    }
 
     private fun getIntentFilter() = IntentFilter().apply {
         addAction(BluetoothDevice.ACTION_FOUND)
