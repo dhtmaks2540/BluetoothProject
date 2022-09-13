@@ -8,13 +8,15 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import androidx.activity.viewModels
 import com.example.bluetoothproject.base.BaseActivity
 import com.example.bluetoothproject.bluetooth.*
 import com.example.bluetoothproject.bluetooth.model.StreamChargeMode
+import com.example.bluetoothproject.bluetooth.model.StreamMode
 import com.example.bluetoothproject.bluetooth.model.StreamWaitingMode
 import com.example.bluetoothproject.databinding.ActivityConnectBinding
+import com.example.bluetoothproject.di.BluetoothMode
+import com.example.bluetoothproject.di.BluetoothModeProvider
 import dagger.hilt.android.AndroidEntryPoint
 import timber.log.Timber
 import java.util.*
@@ -27,7 +29,7 @@ class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBindin
     private lateinit var connectThread: ConnectThread
 
     @Inject
-    lateinit var bluetoothMode: BluetoothMode
+    lateinit var bluetoothModeProvider: BluetoothModeProvider
 
     override val viewModel: ConnectViewModel by viewModels()
 
@@ -50,6 +52,15 @@ class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBindin
         super.onCreate(savedInstanceState)
 
         init()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        connectedHandler.unRegisterListener()
+        if(::connectThread.isInitialized) {
+            connectThread.cancel()
+        }
     }
 
     // 권한요청 결과
@@ -87,23 +98,14 @@ class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBindin
             }
         }
 
-        connectedHandler.setListener(object : HandlerMessageListener {
+        connectedHandler.registerListener(object : HandlerMessageListener {
             override fun getFlagMessage(flag: Boolean) {
                 viewModel.setConnected(flag)
+                showMessage(this@ConnectActivity, if(flag) "연결" else "연결 끊김")
             }
 
-            override fun getModeData(modeData: Any) {
-                useTimber("Mode : $bluetoothMode")
-                when(bluetoothMode) {
-                    BluetoothMode.WAITING_MODE -> {
-                        val data = modeData as StreamWaitingMode
-                        useTimber("Wait - ${data.remainTime}")
-                    }
-                    BluetoothMode.CHARGE_MODE -> {
-                        val data = modeData as StreamChargeMode
-                        useTimber("Charge - ${data.packetCount}")
-                    }
-                }
+            override fun getModeData(modeData: StreamMode) {
+                viewModel.setPacketData(modeData)
             }
         })
 
@@ -137,7 +139,7 @@ class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBindin
                 // UUID 선언
                 val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
                 try {
-                    connectThread = ConnectThread(uuid, device, connectedHandler)
+                    connectThread = ConnectThread(uuid, device, connectedHandler, bluetoothModeProvider)
 
                     /**
                      * run은 스레드의 override된 메서드만 호출하는 것
@@ -145,7 +147,6 @@ class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBindin
                      */
                     connectThread.start()
 
-                    showMessage(this, "연결 시도")
                 } catch (e: Exception) { // 연결에 실패할 경우 호출됨
                     useTimber("Connect Exception")
                 }
@@ -158,13 +159,18 @@ class ConnectActivity @Inject constructor() : BaseActivity<ActivityConnectBindin
             showMessage(this, "블루투스가 비활성화되어 있습니다.")
             return
         }
+        
         if (viewModel.isConnected.value == false) {
-            showMessage(this, "연결이 되지않아 측정이 불가합니다.")
+            showMessage(this, "기기와 연결이 되지않아 측정이 불가합니다.")
             return
         }
-        if (viewModel.dataList.value?.get(2) != 1) {
-            showMessage(this, "헤드셋이 이마에 밀착되지 않았거나 오른쪽 귓볼에 센서가 착용되지 않았습니다.")
+
+        if (bluetoothModeProvider.bluetoothMode != BluetoothMode.ACTIVATE_MODE) {
+            showMessage(this, "헤드셋을 제대로 착용하지 않았습니다.")
+            return
         }
+
+
     }
 
     // 권한요청

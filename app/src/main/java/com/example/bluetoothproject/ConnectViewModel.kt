@@ -4,41 +4,57 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import com.example.bluetoothproject.bluetooth.BluetoothMode
+import com.example.bluetoothproject.bluetooth.model.StreamChargeMode
+import com.example.bluetoothproject.bluetooth.model.StreamMeasureMode
+import com.example.bluetoothproject.bluetooth.model.StreamMode
+import com.example.bluetoothproject.bluetooth.model.StreamWaitingMode
+import com.example.bluetoothproject.di.BluetoothMode
+import com.example.bluetoothproject.di.BluetoothModeProvider
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
 @OptIn(ExperimentalUnsignedTypes::class)
 @HiltViewModel
 class ConnectViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle
-) : ViewModel()
-{
+    private val savedStateHandle: SavedStateHandle,
+    val bluetoothModeProvider: BluetoothModeProvider
+) : ViewModel() {
     private val _deviceName = MutableLiveData(savedStateHandle.get<String>(DEVICE_NAME))
     val deviceName: LiveData<String?> = _deviceName
 
     private val _deviceAddress = MutableLiveData(savedStateHandle.get<String>(DEVICE_ADDRESS))
     val deviceAddress: LiveData<String?> = _deviceAddress
 
-    private val _test = MutableLiveData<UByteArray>()
-    val test: LiveData<UByteArray> = _test
-
-    private val _dataList = MutableLiveData<List<Int>>()
-    val dataList: LiveData<List<Int>> = _dataList
-
-    private val _isConnected = MutableLiveData<Boolean>()
+    private val _isConnected = MutableLiveData(false)
     val isConnected: LiveData<Boolean> = _isConnected
 
-    fun setDataString(data: String) {
-        val list = data.split(" ").map { it.toInt() }
-        _dataList.postValue(list)
-    }
+    private val _packetData = MutableLiveData<StreamMode>()
+
+    val packetData: LiveData<StreamMode> = _packetData
 
     fun setConnected(flag: Boolean) {
         _isConnected.postValue(flag)
     }
 
-    fun setTest(byteArray: ByteArray) {
-        _test.postValue(byteArray.toUByteArray())
+    fun setPacketData(data: StreamMode) {
+        when(data) {
+            is StreamChargeMode -> _packetData.postValue(data)
+            is StreamWaitingMode -> _packetData.postValue(data)
+            is StreamMeasureMode -> _packetData.postValue(data)
+        }
+//        when(bluetoothModeProvider.bluetoothMode) {
+//            BluetoothMode.WAITING_MODE -> {
+//                _packetData.postValue(data as StreamWaitingMode)
+//            }
+//            BluetoothMode.CHARGE_MODE -> {
+//                _packetData.postValue(data as StreamChargeMode)
+//            }
+//            BluetoothMode.ACTIVATE_MODE -> {
+//                _packetData.postValue(data as StreamMeasureMode)
+//            }
+//            else -> {
+//
+//            }
+//        }
     }
 }

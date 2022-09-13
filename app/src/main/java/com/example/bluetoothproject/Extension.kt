@@ -11,7 +11,7 @@ const val DEVICE_ADDRESS = "deviceAddress"
 const val DEVICE_NAME = "deviceName"
 
 fun showMessage(context: Context, message: String) {
-    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
 }
 
 fun useTimber(message: String) {

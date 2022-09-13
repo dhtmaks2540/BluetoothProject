@@ -118,7 +118,7 @@
             android:textSize="25sp"
             app:layout_constraintStart_toEndOf="@id/label_mode"
             app:layout_constraintTop_toTopOf="@id/label_mode"
-            app:mode="@{vm.dataList[2]}"
+            app:mode="@{vm.packetData.nowMode}"
             tools:text="연결안됨.." />
 
         <androidx.appcompat.widget.AppCompatTextView
@@ -136,10 +136,220 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
             android:textSize="25sp"
+            app:battery="@{vm.packetData}"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
             app:layout_constraintStart_toEndOf="@id/label_battery"
             app:layout_constraintTop_toTopOf="@id/label_battery"
             tools:text="충전중.." />
 
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_packet_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Packet Count: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_battery" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_packet_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text='@{vm.packetData.packetCount.toString() ?? "0"}'
+            android:textSize="25sp"
+            app:layout_constraintStart_toEndOf="@id/label_packet_count"
+            app:layout_constraintTop_toTopOf="@id/label_packet_count"
+            tools:text="0" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_bpm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="BPM: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_packet_count" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_bpm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:bpm="@{vm.packetData}"
+            app:layout_constraintStart_toEndOf="@id/label_bpm"
+            app:layout_constraintTop_toTopOf="@id/label_bpm"
+            tools:text="0" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_ch1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="왼쪽 전지 자극: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_bpm" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_ch1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:ch1="@{vm.packetData}"
+            app:layout_constraintStart_toEndOf="@id/label_ch1"
+            app:layout_constraintTop_toTopOf="@id/label_ch1"
+            tools:text="false" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_ch2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="오른쪽 전지 자극: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_ch1" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_ch2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:ch2="@{vm.packetData}"
+            app:layout_constraintStart_toEndOf="@id/label_ch2"
+            app:layout_constraintTop_toTopOf="@id/label_ch2"
+            tools:text="false" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_ref"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="귓볼: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_ch2" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_ref"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:layout_constraintStart_toEndOf="@id/label_ref"
+            app:layout_constraintTop_toTopOf="@id/label_ref"
+            app:ref="@{vm.packetData}"
+            tools:text="false" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_left_eeg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="왼쪽 뇌파: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_ref" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_left_eeg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:layout_constraintStart_toEndOf="@id/label_left_eeg"
+            app:layout_constraintTop_toTopOf="@id/label_left_eeg"
+            app:left_eeg="@{vm.packetData}"
+            tools:text="0" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_right_eeg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="오른쪽 뇌파: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_left_eeg" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_right_eeg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:layout_constraintStart_toEndOf="@id/label_right_eeg"
+            app:layout_constraintTop_toTopOf="@id/label_right_eeg"
+            app:right_eeg="@{vm.packetData}"
+            tools:text="0" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_ppg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="맥파: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_right_eeg" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_ppg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:layout_constraintStart_toEndOf="@id/label_ppg"
+            app:layout_constraintTop_toTopOf="@id/label_ppg"
+            app:ppg="@{vm.packetData}"
+            tools:text="0" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_sd_ppg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="가속도 맥파: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_ppg" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_sd_ppg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:layout_constraintStart_toEndOf="@id/label_sd_ppg"
+            app:layout_constraintTop_toTopOf="@id/label_sd_ppg"
+            app:sd_ppg="@{vm.packetData}"
+            tools:text="0" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/label_rr_interval"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="심박간격데이터: "
+            android:textSize="25sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/label_sd_ppg" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/tv_rr_interval"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textSize="25sp"
+            app:bluetooth_mode="@{vm.packetData.nowMode}"
+            app:layout_constraintStart_toEndOf="@id/label_rr_interval"
+            app:layout_constraintTop_toTopOf="@id/label_rr_interval"
+            app:rr_interval="@{vm.packetData}"
+            tools:text="0" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

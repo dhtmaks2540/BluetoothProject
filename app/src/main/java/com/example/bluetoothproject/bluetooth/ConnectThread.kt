@@ -5,48 +5,47 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.os.Bundle
 import android.os.Message
-import com.example.bluetoothproject.ConnectViewModel
 import com.example.bluetoothproject.bluetooth.model.StreamChargeMode
+import com.example.bluetoothproject.bluetooth.model.StreamMeasureMode
+import com.example.bluetoothproject.bluetooth.model.StreamMode
 import com.example.bluetoothproject.bluetooth.model.StreamWaitingMode
+import com.example.bluetoothproject.di.BluetoothMode
+import com.example.bluetoothproject.di.BluetoothModeProvider
 import com.example.bluetoothproject.useTimber
-import java.io.*
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.*
-import javax.inject.Inject
 
 @SuppressLint("MissingPermission")
 class ConnectThread(
     private val myUUID: UUID,
     private val device: BluetoothDevice,
-    val connectedHandler: ConnectedHandler
+    private val connectedHandler: ConnectedHandler,
+    private val bluetoothModeProvider: BluetoothModeProvider
 ) : Thread() {
-    @Inject
-    lateinit var nowMode: BluetoothMode
-
     private lateinit var message: Message
     private val bundle = Bundle()
+
     // BluetoothDevice 로부터 BluetoothSocket 획득
     private val connectSocket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
         device.createRfcommSocketToServiceRecord(myUUID)
     }
-    private val connectedThread: ConnectedThread? by lazy {
-        ConnectedThread()
-    }
 
     override fun run() {
         try {
-            if (connectedThread?.state == State.RUNNABLE) {
-                connectedThread?.cancel()
-            }
+            val connectedThread = ConnectedThread(connectedHandler, connectSocket, bluetoothModeProvider)
 
             // 연결 수행
             connectSocket?.connect()
             connectSocket?.let {
-                connectedThread?.start()
+                connectedThread.start()
             }
         } catch (e: IOException) { // 기기와의 연결이 실패할 경우 호출
             cancel()
 
             bundle.putBoolean(CONNECT_FLAG, false)
+            bluetoothModeProvider.bluetoothMode = BluetoothMode.NOT_CONNECTED_MODE
             message = connectedHandler.obtainMessage()
             message.what = CONNECT_TYPE
             message.data = bundle
@@ -65,15 +64,21 @@ class ConnectThread(
     }
 
     @OptIn(ExperimentalUnsignedTypes::class)
-    private inner class ConnectedThread: Thread() {
+    private class ConnectedThread(
+        private val connectedHandler: ConnectedHandler,
+        private val connectSocket: BluetoothSocket?,
+        private val bluetoothModeProvider: BluetoothModeProvider,
+    ) : Thread() {
         private lateinit var inputStream: InputStream
         private lateinit var outputStream: OutputStream
+        private val bundle = Bundle()
+        private lateinit var message: Message
 
         init {
             try {
                 // BluetoothSocket의 InputStream, OutputStream 초기화
                 inputStream = connectSocket?.inputStream!!
-                outputStream = connectSocket?.outputStream!!
+                outputStream = connectSocket.outputStream!!
             } catch (e: IOException) {
                 useTimber(e.message.toString())
             }
@@ -98,23 +103,23 @@ class ConnectThread(
                         // 모드 확인
                         val modeValue = uBuffer[2].toInt()
                         // 스트림
-                        if(modeValue in 0..15) {
+                        if (modeValue in 0..15) {
                             message.what = MODE_DATA
-                            when(modeValue) {
+                            when (modeValue) {
                                 // 대기
                                 0 -> {
-                                    nowMode = BluetoothMode.WAITING_MODE
-                                    val data = StreamWaitingMode(uBuffer)
-                                    message.obj = data
+                                    bluetoothModeProvider.bluetoothMode = BluetoothMode.WAITING_MODE
+                                    message.obj = StreamWaitingMode(uBuffer)
                                 }
                                 // 충전
                                 2 -> {
-                                    nowMode = BluetoothMode.CHARGE_MODE
-                                    val data = StreamChargeMode(uBuffer)
-                                    message.obj = data
+                                    bluetoothModeProvider.bluetoothMode = BluetoothMode.CHARGE_MODE
+                                    message.obj = StreamChargeMode(uBuffer)
                                 }
                                 // 활성화
                                 else -> {
+                                    bluetoothModeProvider.bluetoothMode = BluetoothMode.ACTIVATE_MODE
+                                    message.obj = StreamMeasureMode(uBuffer)
 
                                 }
                             }
@@ -123,6 +128,7 @@ class ConnectThread(
                     }
                 } catch (e: Exception) { // 기기와의 연결이 끊기면 호출
                     bundle.putBoolean(CONNECT_FLAG, false)
+                    bluetoothModeProvider.bluetoothMode = BluetoothMode.NOT_CONNECTED_MODE
                     message = connectedHandler.obtainMessage()
                     message.what = CONNECT_TYPE
                     message.data = bundle
